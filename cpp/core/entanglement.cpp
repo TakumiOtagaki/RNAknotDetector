@@ -44,6 +44,23 @@ std::vector<int> BuildSkipResidues(const Loop &loop) {
     }
     return skip;
   }
+  if (loop.kind == LoopKind::kMulti) {
+    int min_res = std::numeric_limits<int>::max();
+    int max_res = std::numeric_limits<int>::min();
+    for (const auto &pair : loop.closing_pairs) {
+      auto [i, j] = SortedPair(pair);
+      min_res = std::min(min_res, i);
+      max_res = std::max(max_res, j);
+      skip.push_back(i);
+      skip.push_back(j);
+    }
+    if (min_res <= max_res) {
+      for (int idx = min_res; idx <= max_res; ++idx) {
+        skip.push_back(idx);
+      }
+    }
+    return skip;
+  }
   return skip;
 }
 
@@ -116,8 +133,7 @@ std::vector<Surface> BuildSurfaces(const std::vector<ResidueCoord> &coords,
   CoordMap map = BuildCoordMap(coords, options.atom_index);
   std::vector<Surface> surfaces;
   surfaces.reserve(loops.size());
-  std::cerr << "[debug] BuildSurfaces: loops=" << loops.size()
-            << " n_res=" << map.n_res << "\n";
+
   for (const auto &loop : loops) {
     Surface surface;
     surface.loop_id = loop.id;
@@ -127,10 +143,6 @@ std::vector<Surface> BuildSurfaces(const std::vector<ResidueCoord> &coords,
     if (loop.closing_pairs.empty()) {
       std::cerr << "[debug] loop=" << loop.id << " kind=" << static_cast<int>(loop.kind)
                 << " closing_pairs=0\n";
-    } else {
-      std::cerr << "[debug] loop=" << loop.id << " kind=" << static_cast<int>(loop.kind)
-                << " closing_pairs=" << loop.closing_pairs.size() << " first_pair=("
-                << loop.closing_pairs[0].i << "," << loop.closing_pairs[0].j << ")\n";
     }
 
     std::vector<int> boundary_indices;
@@ -177,6 +189,7 @@ std::vector<Surface> BuildSurfaces(const std::vector<ResidueCoord> &coords,
         }
       }
     } else {
+      // add_range を最小スコープで定義。閉区間 [start, end] の残基を追加。
       auto add_range = [&](int start, int end) {
         if (start > end) {
           return;
@@ -206,13 +219,8 @@ std::vector<Surface> BuildSurfaces(const std::vector<ResidueCoord> &coords,
           add_range(i, j);
         }
       } else {
-        for (int res_index : loop.boundary_residues) {
-          add_index(res_index);
-        }
-        for (const auto &pair : loop.closing_pairs) {
-          add_index(pair.i);
-          add_index(pair.j);
-        }
+        std::cerr << "[warning] loop=" << loop.id
+                  << " unknown loop kind for boundary construction\n";
       }
     }
 
@@ -254,8 +262,6 @@ Result EvaluateEntanglement(const std::vector<ResidueCoord> &coords,
     }
     segments.push_back(Segment{i, map.coords[i], map.coords[i + 1]});
   }
-  std::cerr << "[debug] EvaluateEntanglement: surfaces=" << surfaces.size()
-            << " segments=" << segments.size() << "\n";
   const std::unordered_set<int> debug_segments = {46, 89, 143};
 
   std::unordered_set<int64_t> hit_keys;

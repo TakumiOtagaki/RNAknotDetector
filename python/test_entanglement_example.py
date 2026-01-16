@@ -80,11 +80,24 @@ def main() -> int:
         eps_polygon=args.eps_polygon,
     )
 
+    print("[debug] indices are 1-based (residue indices and segment ids)")
     print(f"K = {result.K}")
+    loop_map = {loop.id: loop for loop in loops}
+    res_id_map = {res.res_index: res.pdb_res_id for res in coords_py}
     for hit in result.hits:
+        loop = loop_map.get(hit.loop_id)
+        if loop is None:
+            continue
         p = hit.point
+        loop_type = str(loop.kind)
+        closing_pairs = [(bp.i, bp.j) for bp in loop.closing_pairs]
+        i = hit.segment_id
+        j = hit.segment_id + 1
+        i_label = res_id_map.get(i, str(i))
+        j_label = res_id_map.get(j, str(j))
         print(
-            f"hit loop={hit.loop_id} segment={hit.segment_id} "
+            f"hit loop={hit.loop_id} type={loop_type} "
+            f"pairs={closing_pairs} segment=({i_label},{j_label}) "
             f"point=({p.x:.3f},{p.y:.3f},{p.z:.3f})"
         )
     return 0
