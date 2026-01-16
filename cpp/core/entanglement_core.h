@@ -19,7 +19,12 @@ struct ResidueCoord {
 struct BasePair {
   int i = 0;  // 1-based
   int j = 0;  // 1-based
-  std::string bp_type;
+  enum class Type {
+    kUnclassified,
+    kCanonical,
+    kNonCanonical,
+  };
+  Type bp_type = Type::kUnclassified;
 };
 
 enum class LoopKind {

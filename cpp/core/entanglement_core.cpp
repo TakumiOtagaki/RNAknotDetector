@@ -41,6 +41,8 @@ std::vector<int> CollectUnpaired(const std::vector<int> &pair_map, int start, in
   return residues;
 }
 
+// Find immediate child base pairs inside (i, j).
+// The returned pairs are those not nested within another paired region.
 std::vector<BasePair> FindChildPairs(const std::vector<int> &pair_map, int i, int j) {
   std::vector<BasePair> child_pairs;
   int depth = 0;
@@ -51,7 +53,7 @@ std::vector<BasePair> FindChildPairs(const std::vector<int> &pair_map, int i, in
     int partner = pair_map[idx];
     if (idx < partner) {
       if (depth == 0) {
-        child_pairs.push_back(BasePair{idx, partner, ""});
+        child_pairs.push_back(BasePair{idx, partner, BasePair::Type::kUnclassified});
       }
       depth++;
     } else if (idx > partner) {
@@ -61,13 +63,16 @@ std::vector<BasePair> FindChildPairs(const std::vector<int> &pair_map, int i, in
   return child_pairs;
 }
 
+// Classify loop by counting immediate child pairs within (i, j).
+// closing_pairs includes the outer pair (i, j) and immediate child pairs.
+// boundary collects unpaired residues on the loop boundary.
 LoopKind ClassifyLoop(const std::vector<int> &pair_map,
                       int i,
                       int j,
                       std::vector<int> *boundary,
                       std::vector<BasePair> *closing_pairs) {
   closing_pairs->clear();
-  closing_pairs->push_back(BasePair{i, j, ""});
+  closing_pairs->push_back(BasePair{i, j, BasePair::Type::kUnclassified});
 
   std::vector<BasePair> child_pairs = FindChildPairs(pair_map, i, j);
   closing_pairs->insert(closing_pairs->end(), child_pairs.begin(), child_pairs.end());
