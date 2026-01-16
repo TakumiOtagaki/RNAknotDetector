@@ -31,15 +31,6 @@ bool IsPaired(const std::vector<int> &pair_map, int idx) {
   return pair_map[idx] != 0;
 }
 
-bool HasPairedInRange(const std::vector<int> &pair_map, int start, int end) {
-  for (int k = start; k <= end; ++k) {
-    if (IsPaired(pair_map, k)) {
-      return true;
-    }
-  }
-  return false;
-}
-
 std::vector<int> CollectUnpaired(const std::vector<int> &pair_map, int start, int end) {
   std::vector<int> residues;
   for (int k = start; k <= end; ++k) {
@@ -50,53 +41,55 @@ std::vector<int> CollectUnpaired(const std::vector<int> &pair_map, int start, in
   return residues;
 }
 
-LoopKind ClassifyLoop(const std::vector<int> &pair_map, int i, int j,
-                      std::vector<int> *boundary) {
-  if (i + 1 > j - 1) {
-    boundary->clear();
-    return LoopKind::kHairpin;
-  }
-  bool has_paired_inside = HasPairedInRange(pair_map, i + 1, j - 1);
-  if (!has_paired_inside) {
-    *boundary = CollectUnpaired(pair_map, i + 1, j - 1);
-    return LoopKind::kHairpin;
-  }
-
-  int k = 0;
+std::vector<BasePair> FindChildPairs(const std::vector<int> &pair_map, int i, int j) {
+  std::vector<BasePair> child_pairs;
+  int depth = 0;
   for (int idx = i + 1; idx <= j - 1; ++idx) {
-    if (IsPaired(pair_map, idx)) {
-      k = idx;
-      break;
+    if (!IsPaired(pair_map, idx)) {
+      continue;
+    }
+    int partner = pair_map[idx];
+    if (idx < partner) {
+      if (depth == 0) {
+        child_pairs.push_back(BasePair{idx, partner, ""});
+      }
+      depth++;
+    } else if (idx > partner) {
+      depth--;
     }
   }
-  if (k == 0) {
+  return child_pairs;
+}
+
+LoopKind ClassifyLoop(const std::vector<int> &pair_map,
+                      int i,
+                      int j,
+                      std::vector<int> *boundary,
+                      std::vector<BasePair> *closing_pairs) {
+  closing_pairs->clear();
+  closing_pairs->push_back(BasePair{i, j, ""});
+
+  std::vector<BasePair> child_pairs = FindChildPairs(pair_map, i, j);
+  closing_pairs->insert(closing_pairs->end(), child_pairs.begin(), child_pairs.end());
+
+  if (child_pairs.empty()) {
     *boundary = CollectUnpaired(pair_map, i + 1, j - 1);
     return LoopKind::kHairpin;
   }
-
-  int l = pair_map[k];
-  if (k > l) {
-    std::swap(k, l);
-  }
-  if (k <= i || l >= j) {
-    *boundary = CollectUnpaired(pair_map, i + 1, j - 1);
-    return LoopKind::kUnknown;
-  }
-
-  bool left_branch = HasPairedInRange(pair_map, i + 1, k - 1);
-  bool right_branch = HasPairedInRange(pair_map, l + 1, j - 1);
-  if (left_branch || right_branch) {
-    *boundary = CollectUnpaired(pair_map, i + 1, j - 1);
-    return LoopKind::kMulti;
+  if (child_pairs.size() == 1) {
+    int k = std::min(child_pairs[0].i, child_pairs[0].j);
+    int l = std::max(child_pairs[0].i, child_pairs[0].j);
+    auto left = CollectUnpaired(pair_map, i + 1, k - 1);
+    auto right = CollectUnpaired(pair_map, l + 1, j - 1);
+    boundary->clear();
+    boundary->reserve(left.size() + right.size());
+    boundary->insert(boundary->end(), left.begin(), left.end());
+    boundary->insert(boundary->end(), right.begin(), right.end());
+    return LoopKind::kInternal;
   }
 
-  boundary->clear();
-  auto left = CollectUnpaired(pair_map, i + 1, k - 1);
-  auto right = CollectUnpaired(pair_map, l + 1, j - 1);
-  boundary->reserve(left.size() + right.size());
-  boundary->insert(boundary->end(), left.begin(), left.end());
-  boundary->insert(boundary->end(), right.begin(), right.end());
-  return LoopKind::kInternal;
+  *boundary = CollectUnpaired(pair_map, i + 1, j - 1);
+  return LoopKind::kMulti;
 }
 
 }  // namespace
@@ -117,15 +110,15 @@ std::vector<Loop> BuildLoops(const std::vector<BasePair> &base_pairs,
       continue;
     }
     std::vector<int> boundary;
-    LoopKind kind = ClassifyLoop(pair_map, i, j, &boundary);
+    std::vector<BasePair> closing_pairs;
+    LoopKind kind = ClassifyLoop(pair_map, i, j, &boundary, &closing_pairs);
     if (kind == LoopKind::kMulti && !options.include_multi) {
       continue;
     }
     Loop loop;
     loop.id = loop_id++;
-    loop.i = i;
-    loop.j = j;
     loop.kind = kind;
+    loop.closing_pairs = std::move(closing_pairs);
     loop.boundary_residues = std::move(boundary);
     loops.push_back(std::move(loop));
   }
