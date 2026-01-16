@@ -2,21 +2,11 @@ from __future__ import annotations
 
 from typing import Iterable, List, Optional, Sequence, Tuple
 
-try:
-    from pymol import cmd
-except ImportError:  # pragma: no cover - used only inside PyMOL
-    cmd = None
+from pymol import cmd
 
-try:
-    import rnaknotdetector_core as core
-except ImportError:  # pragma: no cover - bindings not built yet
-    core = None
+import rnaknotdetector_core as core
 
-try:
-    from secstruct2bpseq import parse_secstruct, read_secstruct_file
-except ImportError:  # pragma: no cover - used only when helper is available
-    parse_secstruct = None
-    read_secstruct_file = None
+from secstruct2bpseq import parse_secstruct, read_secstruct_file
 
 
 def print_main_layer_pairs(
@@ -44,6 +34,38 @@ def print_main_layer_pairs(
     residues = _extract_residues(cmd_handle, model_name, chain_id)
     _print_pairs(main_pairs, residues, len(secstruct))
     return main_pairs
+
+
+def color_main_layer_pairs(
+    model_name: str,
+    chain_id: str,
+    secstruct_path: Optional[str] = None,
+    color: str = "red",
+    cmd_obj=None,
+) -> List[int]:
+    if core is None:
+        raise RuntimeError("rnaknotdetector_core module is not available")
+    cmd_handle = cmd_obj or cmd
+    if cmd_handle is None:
+        raise RuntimeError("pymol.cmd is not available")
+    if read_secstruct_file is None or parse_secstruct is None:
+        raise RuntimeError("secstruct2bpseq helpers are not available")
+
+    if secstruct_path is None:
+        secstruct_path = f"{model_name}.secstruct"
+
+    _, secstruct = read_secstruct_file(secstruct_path)
+    pair_map = parse_secstruct(secstruct)
+    bp_list = [(i, j) for i, j in enumerate(pair_map) if i > 0 and j > i]
+    main_pairs = core.get_main_layer_pairs(bp_list)
+
+    residues = _unique_residues_from_pairs(main_pairs)
+    if not residues:
+        return []
+
+    selection = _selection_from_residues(residues, chain_id=chain_id)
+    cmd_handle.color(color, f"({model_name} and {selection})")
+    return residues
 
 
 def _unique_residues_from_pairs(pairs: Iterable[Tuple[int, int]]) -> List[int]:
@@ -93,5 +115,6 @@ def _print_pairs(
             print(f"  {i} - {j}")
 
 
-if cmd is not None:  # pragma: no cover - PyMOL runtime only
-    cmd.extend("print_main_layer_pairs", print_main_layer_pairs)
+
+cmd.extend("print_main_layer_pairs", print_main_layer_pairs)
+cmd.extend("color_main_layer_pairs", color_main_layer_pairs)
