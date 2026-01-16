@@ -1,7 +1,3 @@
-以下に、現時点の前提（FARFAR2 の二次構造制約を信頼／pseudoknotは扱わない／boolean filter）に基づく **要件定義書（ドラフト）**を作成します。Rosetta統合の複雑性を踏まえ、段階導入（外部評価→soft penalty→hard reject）を明示した構成にしています。
-
-⸻
-
 要件定義書：FARFAR2向け “軽量RNAspider” entanglement boolean filter
 
 1. 背景と目的
