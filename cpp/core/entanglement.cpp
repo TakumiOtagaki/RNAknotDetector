@@ -3,6 +3,7 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <iostream>
 #include <stdexcept>
 #include <unordered_set>
 
@@ -234,25 +235,128 @@ std::vector<Surface> BuildSurfaces(const std::vector<ResidueCoord> &coords,
   CoordMap map = BuildCoordMap(coords, options.atom_index);
   std::vector<Surface> surfaces;
   surfaces.reserve(loops.size());
+  std::cerr << "[debug] BuildSurfaces: loops=" << loops.size()
+            << " n_res=" << map.n_res << "\n";
   for (const auto &loop : loops) {
     Surface surface;
     surface.loop_id = loop.id;
     surface.kind = loop.kind;
     surface.skip_residues = BuildSkipResidues(loop);
 
-    std::vector<Vec3> boundary_points;
-    boundary_points.reserve(loop.boundary_residues.size());
-    for (int res_index : loop.boundary_residues) {
+    if (loop.closing_pairs.empty()) {
+      std::cerr << "[debug] loop=" << loop.id << " kind=" << static_cast<int>(loop.kind)
+                << " closing_pairs=0\n";
+    } else {
+      std::cerr << "[debug] loop=" << loop.id << " kind=" << static_cast<int>(loop.kind)
+                << " closing_pairs=" << loop.closing_pairs.size() << " first_pair=("
+                << loop.closing_pairs[0].i << "," << loop.closing_pairs[0].j << ")\n";
+    }
+
+    std::vector<int> boundary_indices;
+    boundary_indices.reserve(loop.boundary_residues.size() +
+                             loop.closing_pairs.size() * 2);
+    std::vector<char> seen(map.n_res + 1, 0);
+    auto add_index = [&](int res_index) {
       if (res_index <= 0 || res_index > map.n_res) {
-        continue;
+        return;
       }
+      if (seen[res_index]) {
+        return;
+      }
+      seen[res_index] = 1;
+      boundary_indices.push_back(res_index);
+    };
+    if (loop.kind == LoopKind::kMulti) {
+      std::vector<std::pair<int, int>> pairs;
+      pairs.reserve(loop.closing_pairs.size());
+      for (const auto &pair : loop.closing_pairs) {
+        int i = std::min(pair.i, pair.j);
+        int j = std::max(pair.i, pair.j);
+        pairs.emplace_back(i, j);
+      }
+      std::sort(pairs.begin(), pairs.end());
+      if (!pairs.empty()) {
+        int l = pairs.front().first;
+        int i_branch = 0;
+        int j_branch = 0;
+        for (const auto &pair : pairs) {
+          if (pair.first > l) {
+            i_branch = pair.first;
+            j_branch = pair.second;
+            break;
+          }
+        }
+        if (i_branch > 0) {
+          for (int idx = l; idx <= i_branch - 1; ++idx) {
+            add_index(idx);
+          }
+          add_index(i_branch);
+          add_index(j_branch);
+        } else {
+          add_index(l);
+          add_index(pairs.front().second);
+        }
+      }
+    } else {
+      auto add_range = [&](int start, int end) {
+        if (start > end) {
+          return;
+        }
+        for (int idx = start; idx <= end; ++idx) {
+          add_index(idx);
+        }
+      };
+      if (loop.closing_pairs.empty()) {
+        for (int res_index : loop.boundary_residues) {
+          add_index(res_index);
+        }
+      } else if (loop.kind == LoopKind::kHairpin) {
+        int i = std::min(loop.closing_pairs[0].i, loop.closing_pairs[0].j);
+        int j = std::max(loop.closing_pairs[0].i, loop.closing_pairs[0].j);
+        add_range(i, j);
+      } else if (loop.kind == LoopKind::kInternal) {
+        int i = std::min(loop.closing_pairs[0].i, loop.closing_pairs[0].j);
+        int j = std::max(loop.closing_pairs[0].i, loop.closing_pairs[0].j);
+        if (loop.closing_pairs.size() >= 2) {
+          int h = std::min(loop.closing_pairs[1].i, loop.closing_pairs[1].j);
+          int l = std::max(loop.closing_pairs[1].i, loop.closing_pairs[1].j);
+          add_range(i, h - 1);
+          add_index(h);
+          add_index(l);
+          add_range(l + 1, j - 1);
+          add_index(i);
+          add_index(j);
+        } else {
+          add_range(i, j);
+        }
+      } else {
+        for (int res_index : loop.boundary_residues) {
+          add_index(res_index);
+        }
+        for (const auto &pair : loop.closing_pairs) {
+          add_index(pair.i);
+          add_index(pair.j);
+        }
+      }
+    }
+
+    std::vector<Vec3> boundary_points;
+    boundary_points.reserve(boundary_indices.size());
+    for (int res_index : boundary_indices) {
       if (!map.has_coord[res_index]) {
         continue;
       }
       boundary_points.push_back(map.coords[res_index]);
     }
+    std::cerr << "[debug] loop=" << loop.id
+              << " boundary_indices=" << boundary_indices.size()
+              << " boundary_points=" << boundary_points.size()
+              << " skip_residues=" << surface.skip_residues.size() << "\n";
     surface.plane = FitPlane(boundary_points, options.eps_collinear);
     surface.polygon = ProjectPolygon(boundary_points, surface.plane);
+    std::cerr << "[debug] loop=" << loop.id
+              << " plane_valid=" << surface.plane.valid
+              << " polygon_valid=" << surface.polygon.valid << "\n";
     surfaces.push_back(std::move(surface));
   }
   return surfaces;
@@ -274,10 +378,15 @@ Result EvaluateEntanglement(const std::vector<ResidueCoord> &coords,
     }
     segments.push_back(Segment{i, map.coords[i], map.coords[i + 1]});
   }
+  std::cerr << "[debug] EvaluateEntanglement: surfaces=" << surfaces.size()
+            << " segments=" << segments.size() << "\n";
+  const std::unordered_set<int> debug_segments = {46, 89, 143};
 
   std::unordered_set<int64_t> hit_keys;
   for (const auto &surface : surfaces) {
     if (!surface.plane.valid || !surface.polygon.valid) {
+      std::cerr << "[debug] loop=" << surface.loop_id
+                << " skipped: invalid surface\n";
       continue;
     }
     std::vector<char> skip_mask(map.n_res + 1, 0);
@@ -286,19 +395,62 @@ Result EvaluateEntanglement(const std::vector<ResidueCoord> &coords,
         skip_mask[idx] = 1;
       }
     }
+    int candidate_segments = 0;
+    int plane_hits = 0;
     for (const auto &segment : segments) {
       int i = segment.id;
+      bool watch_segment = debug_segments.count(i) > 0;
       if (skip_mask[i] || skip_mask[i + 1]) {
+        if (watch_segment) {
+          std::cerr << "[debug] loop=" << surface.loop_id
+                    << " segment=" << i << " skipped_by_mask\n";
+        }
         continue;
       }
+      candidate_segments++;
       Vec3 intersection;
       if (!SegmentPlaneIntersection(segment.a, segment.b, surface.plane, options.eps_plane,
                                     &intersection)) {
+        if (watch_segment) {
+          std::cerr << "[debug] loop=" << surface.loop_id
+                    << " segment=" << i << " plane_miss\n";
+        }
         continue;
       }
+      plane_hits++;
       Vec3 d = Sub(intersection, surface.plane.c);
       Vec2 q{Dot(d, surface.plane.e1), Dot(d, surface.plane.e2)};
-      if (!PointInPolygon2D(q, surface.polygon, options.eps_polygon)) {
+      bool in_poly = PointInPolygon2D(q, surface.polygon, options.eps_polygon);
+      if (watch_segment) {
+        double min_x = 0.0;
+        double min_y = 0.0;
+        double max_x = 0.0;
+        double max_y = 0.0;
+        bool bbox_init = false;
+        for (const auto &v : surface.polygon.vertices) {
+          if (!bbox_init) {
+            min_x = max_x = v.x;
+            min_y = max_y = v.y;
+            bbox_init = true;
+            continue;
+          }
+          min_x = std::min(min_x, v.x);
+          min_y = std::min(min_y, v.y);
+          max_x = std::max(max_x, v.x);
+          max_y = std::max(max_y, v.y);
+        }
+        std::cerr << "[debug] loop=" << surface.loop_id
+                  << " segment=" << i << " plane_hit"
+                  << " in_polygon=" << in_poly
+                  << " q=(" << q.x << "," << q.y << ")"
+                  << " poly_n=" << surface.polygon.vertices.size();
+        if (bbox_init) {
+          std::cerr << " poly_bbox=[(" << min_x << "," << min_y << "),("
+                    << max_x << "," << max_y << ")]";
+        }
+        std::cerr << "\n";
+      }
+      if (!in_poly) {
         continue;
       }
       int64_t key = HitKey(surface.loop_id, segment.id);
@@ -306,6 +458,10 @@ Result EvaluateEntanglement(const std::vector<ResidueCoord> &coords,
         result.hits.push_back(HitInfo{surface.loop_id, segment.id, intersection});
       }
     }
+    std::cerr << "[debug] loop=" << surface.loop_id
+              << " candidates=" << candidate_segments
+              << " plane_hits=" << plane_hits
+              << " hits=" << result.hits.size() << "\n";
   }
   result.K = static_cast<int>(result.hits.size());
   return result;

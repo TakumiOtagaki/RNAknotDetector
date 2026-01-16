@@ -1,5 +1,6 @@
 #include "geometry2d.h"
 
+#include <algorithm>
 #include <cmath>
 
 namespace rna {
@@ -34,6 +35,56 @@ double DistancePointSegmentSquared(const Vec2 &p, const Vec2 &a, const Vec2 &b) 
   return dx * dx + dy * dy;
 }
 
+double Cross2D(const Vec2 &a, const Vec2 &b, const Vec2 &c) {
+  double abx = b.x - a.x;
+  double aby = b.y - a.y;
+  double acx = c.x - a.x;
+  double acy = c.y - a.y;
+  return abx * acy - aby * acx;
+}
+
+std::vector<Vec2> ConvexHull(std::vector<Vec2> points) {
+  if (points.size() < 3) {
+    return points;
+  }
+  std::sort(points.begin(), points.end(), [](const Vec2 &a, const Vec2 &b) {
+    if (a.x == b.x) {
+      return a.y < b.y;
+    }
+    return a.x < b.x;
+  });
+  std::vector<Vec2> hull;
+  hull.reserve(points.size() * 2);
+  for (const auto &p : points) {
+    while (hull.size() >= 2) {
+      size_t n = hull.size();
+      if (Cross2D(hull[n - 2], hull[n - 1], p) <= 0.0) {
+        hull.pop_back();
+      } else {
+        break;
+      }
+    }
+    hull.push_back(p);
+  }
+  size_t lower_size = hull.size();
+  for (size_t i = points.size(); i-- > 0;) {
+    const auto &p = points[i];
+    while (hull.size() > lower_size) {
+      size_t n = hull.size();
+      if (Cross2D(hull[n - 2], hull[n - 1], p) <= 0.0) {
+        hull.pop_back();
+      } else {
+        break;
+      }
+    }
+    hull.push_back(p);
+  }
+  if (!hull.empty()) {
+    hull.pop_back();
+  }
+  return hull;
+}
+
 }  // namespace
 
 Polygon2D ProjectPolygon(const std::vector<Vec3> &points, const Plane &plane) {
@@ -41,11 +92,16 @@ Polygon2D ProjectPolygon(const std::vector<Vec3> &points, const Plane &plane) {
   if (!plane.valid) {
     return poly;
   }
-  poly.vertices.reserve(points.size());
+  std::vector<Vec2> vertices;
+  vertices.reserve(points.size());
   for (const auto &p : points) {
     Vec3 d = Sub(p, plane.c);
-    poly.vertices.push_back(Vec2{Dot(d, plane.e1), Dot(d, plane.e2)});
+    vertices.push_back(Vec2{Dot(d, plane.e1), Dot(d, plane.e2)});
   }
+  if (vertices.size() < 3) {
+    return poly;
+  }
+  poly.vertices = ConvexHull(std::move(vertices));
   poly.valid = poly.vertices.size() >= 3;
   return poly;
 }
@@ -59,7 +115,7 @@ bool PointInPolygon2D(const Vec2 &q, const Polygon2D &poly, double eps_polygon) 
     const Vec2 &a = poly.vertices[i];
     const Vec2 &b = poly.vertices[(i + 1) % poly.vertices.size()];
     if (DistancePointSegmentSquared(q, a, b) <= eps2) {
-      return false;
+      return true;
     }
   }
   bool inside = false;

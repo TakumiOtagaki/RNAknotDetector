@@ -37,6 +37,16 @@ def main() -> int:
     parser.add_argument("--eps-plane", type=float, default=1e-2)
     parser.add_argument("--eps-polygon", type=float, default=1e-2)
     parser.add_argument("--eps-collinear", type=float, default=1e-6)
+    parser.add_argument(
+        "--include-multi",
+        action="store_true",
+        help="Include multiloop surfaces when building loops.",
+    )
+    parser.add_argument(
+        "--main-layer-only",
+        action="store_true",
+        help="Build loops from main layer pairs only (default).",
+    )
     args = parser.parse_args()
 
     coords_py = load_coords(args.pdb_path, chain_id=args.chain)
@@ -45,10 +55,24 @@ def main() -> int:
     _, secstruct = read_secstruct_file(args.secstruct_path)
     pair_map = parse_secstruct(secstruct)
     bp_list = _pair_map_to_list(pair_map)
+    print(f"[debug] input bp count = {len(bp_list)}")
 
-    main_pairs = core.get_main_layer_pairs(bp_list)
-    loops = core.build_loops(main_pairs, len(pair_map) - 1)
+    if args.main_layer_only or not bp_list:
+        main_pairs = core.get_main_layer_pairs(bp_list)
+        print(f"[debug] main layer bp count = {len(main_pairs)}")
+        loop_pairs = main_pairs
+    else:
+        loop_pairs = bp_list
+    loops = core.build_loops(
+        loop_pairs,
+        len(pair_map) - 1,
+        include_multi=args.include_multi,
+        main_layer_only=False,
+    )
+    print(f"[debug] loops built = {len(loops)}")
     surfaces = core.build_surfaces(coords_cpp, loops, eps_collinear=args.eps_collinear)
+    valid_surfaces = sum(1 for s in surfaces if s.plane.valid and s.polygon.valid)
+    print(f"[debug] surfaces built = {len(surfaces)} valid = {valid_surfaces}")
     result = core.evaluate_entanglement(
         coords_cpp,
         surfaces,
