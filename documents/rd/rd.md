@@ -79,7 +79,8 @@
 	3.	n_hat は Σ の最小固有値に対応する固有ベクトル（点群の最小分散方向）
 
 退化（|B_l| < 3、ほぼ共線など）の場合：
- - surface_valid=false とし、当該ループは評価から除外（または保守的にペナルティ）
+ - surface_valid=false とし、当該ループは評価から除外
+ - 判定基準は、最小固有値 λ_min が小さい（または λ_min/λ_max が小さい）場合
 初期は 除外推奨（探索を殺しにくい）。
 
 3.3 平面上での“領域内判定”
@@ -107,7 +108,7 @@ boolean filter用途で高速化したい場合は、P_l を
 
 d_a = \langle a-c, n\_hat \rangle,\quad d_b = \langle b-c, n\_hat \rangle
  - d_a * d_b > 0：同じ側 → 交差しない（スキップ）
- - |d_a| < eps または |d_b| < eps：境界近傍 → 初期実装ではスキップ（偽陽性抑制）
+ - |d_a| < eps_plane または |d_b| < eps_plane：境界近傍 → 初期実装ではスキップ（偽陽性抑制）
  - それ以外：交点を計算
 
 4.2 交点
@@ -119,6 +120,7 @@ x = a + t(b-a)
 
 交点 x を 2D に射影：q = ( dot(x-c,e1), dot(x-c,e2) )
 q ∈ interior(P_l) なら “puncture event” とカウント。
+ - 点内判定の境界許容には eps_polygon を使う
 
 ⸻
 
@@ -126,6 +128,7 @@ q ∈ interior(P_l) なら “puncture event” とカウント。
 
 5.1 フル評価（1構造に対する K）
 
+```txt
 Input: loops, r_{i,k}, n
 Output: K
 
@@ -148,6 +151,7 @@ Output: K
                 // if boolean-only: return K>0
                 // if counting: can break inner loops or continue, depending on definition
 5. return K
+```
 
 5.2 増分評価（MCに使う ΔK：推奨）
 
@@ -185,7 +189,8 @@ AABB を本アルゴリズムでどう使うか（推奨）
 7. 非機能要件（NFR）
  - 欠損 C4′ がある残基は、当該点を使う線分を生成しない
  - 数値安定性：
- - eps（例：1e-3〜1e-2 Å相当）を導入し、平面境界付近の判定をスキップ
+ - eps_plane（例：1e-3〜1e-2 Å相当）を導入し、平面境界付近の判定をスキップ
+ - eps_polygon を導入し、2D多角形の境界付近での判定の揺らぎを抑える
  - デバッグ：
  - どのループ・どの線分でヒットしたかログ可能
 
@@ -198,6 +203,8 @@ AABB を本アルゴリズムでどう使うか（推奨）
  - 「ループ×線分」で1カウント
  - 「ループごとに最大1カウント」
  - など（あなたは soft penalty 用なので、まずは “新規ヒット数” で良い）
+	4.	退化面の扱い：除外方針（surface_valid=false）でよいか
+	5.	eps_plane / eps_polygon の初期値（暫定 1e-2 Å 相当）
 
 ⸻
 
@@ -206,3 +213,43 @@ AABB を本アルゴリズムでどう使うか（推奨）
 あなたが実装に移るなら、まずは Section 5.1 のフル評価を Python か C++ で作り、少数PDBで挙動確認。その後、FARFAR2統合に合わせて Section 5.2 の差分評価＋AABBを入れる、が一番堅いです。
 
 必要なら、上記仕様に沿って「関数分割（インタフェース）」まで提案します（例：build_loop_boundary_indices, fit_plane, project_polygon, segment_plane_intersection, point_in_polygon_2d, aabb_intersect など）。
+
+⸻
+
+付録：M1 API / データ構造（案）
+
+目的：plane近似＋早期終了＋簡易AABB を最小構成で実装する。
+
+構造体（例）
+ - Vec3 { double x,y,z }
+ - Plane { Vec3 c; Vec3 n_hat; bool valid; }
+ - Polygon2D { std::vector<Vec2> vertices; bool valid; }
+ - Surface {
+    int loop_id;
+    Plane plane;
+    Polygon2D polygon;
+    Aabb aabb;
+    std::vector<int> skip_residues;  // R_l
+  }
+ - HitInfo {
+    int loop_id;
+    int segment_id;  // backbone segment index (i)
+    Vec3 point;      // 交点（任意）
+  }
+ - Result {
+    int K;
+    std::vector<HitInfo> hits;  // 新規ヒットのみ
+  }
+
+API（例）
+ - BuildLoops(base_pairs, n_res, options) -> vector<Loop>  // 既存
+ - BuildSurfaces(coords, loops, options) -> vector<Surface>
+ - EvaluateEntanglement(coords, surfaces, options) -> Result
+   - options: eps_plane, eps_polygon, eps_collinear, early_exit(bool)
+
+補助関数（例）
+ - FitPlane(points) -> Plane
+ - ProjectPolygon(points, plane) -> Polygon2D
+ - PointInPolygon2D(q, polygon, eps_polygon) -> bool
+ - SegmentPlaneIntersection(a, b, plane, eps_plane) -> (hit, t, point)
+ - AabbIntersect(aabb1, aabb2) -> bool
