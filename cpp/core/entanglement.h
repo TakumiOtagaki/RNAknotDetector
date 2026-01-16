@@ -45,6 +45,7 @@ struct LoopBuildOptions {
 struct Surface {
   int loop_id = 0;
   LoopKind kind = LoopKind::kUnknown;
+  std::vector<BasePair> closing_pairs;
   Plane plane;
   Polygon2D polygon;
   std::vector<int> skip_residues;

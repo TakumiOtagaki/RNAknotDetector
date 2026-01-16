@@ -133,22 +133,17 @@ Plane FitPlane(const std::vector<Vec3> &points, double eps_collinear) {
   double evecs[3][3] = {{0.0, 0.0, 0.0}, {0.0, 0.0, 0.0}, {0.0, 0.0, 0.0}};
   JacobiEigenSymmetric3x3(cov, evals, evecs);
 
-  int min_idx = 0;
-  int max_idx = 0;
-  for (int i = 1; i < 3; ++i) {
-    if (evals[i] < evals[min_idx]) {
-      min_idx = i;
-    }
-    if (evals[i] > evals[max_idx]) {
-      max_idx = i;
-    }
-  }
+  int order[3] = {0, 1, 2};
+  std::sort(order, order + 3, [&](int a, int b) { return evals[a] < evals[b]; });
+  int min_idx = order[0];
+  int mid_idx = order[1];
+  int max_idx = order[2];
   double max_eval = evals[max_idx];
   if (max_eval <= 0.0) {
     return plane;
   }
-  double ratio = evals[min_idx] / max_eval;
-  if (ratio < eps_collinear) {
+  double mid_ratio = evals[mid_idx] / max_eval;
+  if (mid_ratio < eps_collinear) {
     return plane;
   }
   Vec3 n_hat{evecs[0][min_idx], evecs[1][min_idx], evecs[2][min_idx]};

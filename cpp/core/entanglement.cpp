@@ -138,6 +138,7 @@ std::vector<Surface> BuildSurfaces(const std::vector<ResidueCoord> &coords,
     Surface surface;
     surface.loop_id = loop.id;
     surface.kind = loop.kind;
+    surface.closing_pairs = loop.closing_pairs;
     surface.skip_residues = BuildSkipResidues(loop);
 
     if (loop.closing_pairs.empty()) {
@@ -282,10 +283,23 @@ Result EvaluateEntanglement(const std::vector<ResidueCoord> &coords,
     for (const auto &segment : segments) {
       int i = segment.id;
       bool watch_segment = debug_segments.count(i) > 0;
+      auto log_with_loop = [&](const char *status) {
+        std::cerr << "[debug] loop=" << surface.loop_id
+                  << " type=" << static_cast<int>(surface.kind)
+                  << " pairs=";
+        for (size_t idx = 0; idx < surface.closing_pairs.size(); ++idx) {
+          const auto &bp = surface.closing_pairs[idx];
+          std::cerr << "(" << bp.i << "," << bp.j << ")";
+          if (idx + 1 < surface.closing_pairs.size()) {
+            std::cerr << ",";
+          }
+        }
+        std::cerr << " segment=(" << i << "," << i + 1 << ") " << status;
+      };
+
       if (skip_mask[i] || skip_mask[i + 1]) {
         if (watch_segment) {
-          std::cerr << "[debug] loop=" << surface.loop_id
-                    << " segment=" << i << " skipped_by_mask\n";
+          log_with_loop("skipped_by_mask\n");
         }
         continue;
       }
@@ -301,8 +315,7 @@ Result EvaluateEntanglement(const std::vector<ResidueCoord> &coords,
                     << " d_b=" << d_b << "\n";
         }
         if (watch_segment) {
-          std::cerr << "[debug] loop=" << surface.loop_id
-                    << " segment=" << i << " plane_miss\n";
+          log_with_loop("plane_miss\n");
         }
         continue;
       }
@@ -334,9 +347,8 @@ Result EvaluateEntanglement(const std::vector<ResidueCoord> &coords,
           max_x = std::max(max_x, v.x);
           max_y = std::max(max_y, v.y);
         }
-        std::cerr << "[debug] loop=" << surface.loop_id
-                  << " segment=" << i << " plane_hit"
-                  << " in_polygon=" << in_poly
+        log_with_loop("plane_hit");
+        std::cerr << " in_polygon=" << in_poly
                   << " q=(" << q.x << "," << q.y << ")"
                   << " poly_n=" << surface.polygon.vertices.size();
         if (bbox_init) {
