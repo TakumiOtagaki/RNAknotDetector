@@ -293,11 +293,24 @@ Result EvaluateEntanglement(const std::vector<ResidueCoord> &coords,
       Vec3 intersection;
       if (!SegmentPlaneIntersection(segment.a, segment.b, surface.plane, options.eps_plane,
                                     &intersection)) {
+        if (surface.kind == LoopKind::kMulti && i == 46) {
+          double d_a = Dot(Sub(segment.a, surface.plane.c), surface.plane.n_hat);
+          double d_b = Dot(Sub(segment.b, surface.plane.c), surface.plane.n_hat);
+          std::cerr << "[debug] multi loop=" << surface.loop_id
+                    << " segment=46 plane_miss d_a=" << d_a
+                    << " d_b=" << d_b << "\n";
+        }
         if (watch_segment) {
           std::cerr << "[debug] loop=" << surface.loop_id
                     << " segment=" << i << " plane_miss\n";
         }
         continue;
+      }
+      if (surface.kind == LoopKind::kMulti && i == 46) {
+        std::cerr << "[debug] multi loop=" << surface.loop_id
+                  << " segment=46 plane_hit"
+                  << " point=(" << intersection.x << "," << intersection.y << ","
+                  << intersection.z << ")\n";
       }
       plane_hits++;
       Vec3 d = Sub(intersection, surface.plane.c);
