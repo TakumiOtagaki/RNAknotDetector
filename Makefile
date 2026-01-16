@@ -7,7 +7,7 @@ PYBIND11_INCLUDES := $(shell $(PYTHON) -m pybind11 --includes 2>/dev/null)
 CXXFLAGS ?= -O3 -std=c++17 -fPIC
 LDFLAGS ?= -undefined dynamic_lookup
 
-CORE_SOURCES := cpp/core/entanglement_core.cpp cpp/core/pseudoknot_decomposition.cpp cpp/bindings/pybind_module.cpp
+CORE_SOURCES := cpp/core/entanglement.cpp cpp/core/geometry2d.cpp cpp/core/geometry3d.cpp cpp/core/pseudoknot_decomposition.cpp cpp/bindings/pybind_module.cpp
 CORE_TARGET := python/rnaknotdetector_core$(EXT_SUFFIX)
 
 .PHONY: all clean

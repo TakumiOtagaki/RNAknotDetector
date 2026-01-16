@@ -1,7 +1,7 @@
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
 
-#include "entanglement_core.h"
+#include "entanglement.h"
 
 namespace py = pybind11;
 

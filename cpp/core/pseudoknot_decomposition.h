@@ -2,7 +2,7 @@
 
 #include <vector>
 
-#include "entanglement_core.h"
+#include "entanglement.h"
 
 namespace rna {
 
