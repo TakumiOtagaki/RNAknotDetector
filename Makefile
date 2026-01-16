@@ -1,11 +1,11 @@
-PYTHON ?= python3
+PYTHON ?= .venv/bin/python
 CXX ?= c++
 
-EXT_SUFFIX := $(shell $(PYTHON) - <<'PY'\nimport sysconfig; print(sysconfig.get_config_var('EXT_SUFFIX') or '')\nPY)
-PYBIND11_INCLUDES := $(shell $(PYTHON) -m pybind11 --includes)
+EXT_SUFFIX := $(shell $(PYTHON) -c "import sysconfig; print(sysconfig.get_config_var('EXT_SUFFIX') or '')")
+PYBIND11_INCLUDES := $(shell $(PYTHON) -m pybind11 --includes 2>/dev/null)
 
 CXXFLAGS ?= -O3 -std=c++17 -fPIC
-LDFLAGS ?=
+LDFLAGS ?= -undefined dynamic_lookup
 
 CORE_SOURCES := cpp/core/entanglement_core.cpp cpp/bindings/pybind_module.cpp
 CORE_TARGET := python/rnaknotdetector_core$(EXT_SUFFIX)
