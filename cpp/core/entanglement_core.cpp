@@ -42,7 +42,9 @@ std::vector<int> CollectUnpaired(const std::vector<int> &pair_map, int start, in
 }
 
 // Find immediate child base pairs inside (i, j).
-// The returned pairs are those not nested within another paired region.
+// A child pair is the first paired region encountered when scanning the
+// interval; nested pairs inside that region are ignored.
+// Used to count how many stems close the loop bounded by (i, j).
 std::vector<BasePair> FindChildPairs(const std::vector<int> &pair_map, int i, int j) {
   std::vector<BasePair> child_pairs;
   int depth = 0;
@@ -64,8 +66,9 @@ std::vector<BasePair> FindChildPairs(const std::vector<int> &pair_map, int i, in
 }
 
 // Classify loop by counting immediate child pairs within (i, j).
-// closing_pairs includes the outer pair (i, j) and immediate child pairs.
-// boundary collects unpaired residues on the loop boundary.
+// closing_pairs includes the outer pair (i, j) and each immediate child pair.
+// boundary collects unpaired residues that lie on the loop boundary.
+// Rules: 0 child -> hairpin, 1 child -> internal/bulge/stacking, 2+ -> multi.
 LoopKind ClassifyLoop(const std::vector<int> &pair_map,
                       int i,
                       int j,
@@ -99,12 +102,18 @@ LoopKind ClassifyLoop(const std::vector<int> &pair_map,
 
 }  // namespace
 
+
+// Build closed elements (loops) from base pairs.
+// Each loop corresponds to an outer closing pair (i, j) and immediate child pairs.
+// boundary_residues holds unpaired residues on the loop boundary (minimal set).
+// Pseudoknots are not supported.
 std::vector<Loop> BuildLoops(const std::vector<BasePair> &base_pairs,
                              int n_res,
                              const LoopBuildOptions &options) {
   if (n_res <= 0) {
     throw std::invalid_argument("n_res must be positive");
   }
+  // Placeholder: assumes pseudoknot-free input; no validation for crossing pairs.
   std::vector<int> pair_map = BuildPairMap(base_pairs, n_res);
 
   std::vector<Loop> loops;

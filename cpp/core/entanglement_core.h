@@ -45,6 +45,7 @@ struct LoopBuildOptions {
   bool include_multi = false;
 };
 
+
 std::vector<Loop> BuildLoops(const std::vector<BasePair> &base_pairs,
                              int n_res,
                              const LoopBuildOptions &options = {});

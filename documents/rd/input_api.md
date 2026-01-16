@@ -61,3 +61,4 @@ struct BasePair {
 未決事項
 - 複数原子（2点）を使う場合のコアロジック側の扱い
 - bp_typeをコアロジックで使うかどうか
+- TODO: Python -> C++ で bp_type（canonical/non-canonical）を渡す手段と、その受け口APIを定義する
