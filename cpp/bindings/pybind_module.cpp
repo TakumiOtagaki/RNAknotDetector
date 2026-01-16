@@ -29,22 +29,6 @@ PYBIND11_MODULE(rnaknotdetector_core, m) {
       .value("NON_CANONICAL", rna::BasePair::Type::kNonCanonical);
 
   m.def(
-      "get_multiloop_pairs",
-      [](const std::vector<std::pair<int, int>> &bp_list, int n_res) {
-        auto pairs = ToBasePairs(bp_list, rna::BasePair::Type::kCanonical);
-        auto multi_pairs = rna::CollectMultiLoopPairs(pairs, n_res);
-        std::vector<std::pair<int, int>> result;
-        result.reserve(multi_pairs.size());
-        for (const auto &pair : multi_pairs) {
-          result.emplace_back(pair.i, pair.j);
-        }
-        return result;
-      },
-      py::arg("bp_list"),
-      py::arg("n_res"),
-      "Return closing pairs that belong to multi-loops.");
-
-  m.def(
       "get_main_layer_pairs",
       [](const std::vector<std::pair<int, int>> &bp_list) {
         auto pairs = ToBasePairs(bp_list, rna::BasePair::Type::kCanonical);

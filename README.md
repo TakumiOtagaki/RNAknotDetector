@@ -10,6 +10,6 @@ It is used as a minimal placeholder for surface generation.
 - internal/bulge: unpaired residues between outer (i,j) and inner (k,l) pairs
 - multi: unpaired residues in (i+1 .. j-1) (coarse placeholder)
 
-### PyMOL debug (multi-loop coloring)
-`python/pymol_debug.py` exposes `color_multiloop_pairs` for quick coloring.
+### PyMOL debug
+`python/pymol_debug.py` contains helper utilities for interactive inspection.
 It expects a pybind11 module named `rnaknotdetector_core` to be built.
