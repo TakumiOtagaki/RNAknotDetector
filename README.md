@@ -15,7 +15,7 @@ It is used as a minimal placeholder for surface generation.
 It expects a pybind11 module named `rnaknotdetector_core` to be built.
 
 ```sh
-/opt/homebrew/Cellar/pymol/3.1.0_3/libexec/bin/python -m pip install pandas numpy pybind11
+/opt/homebrew/Cellar/pymol/3.1.0_3/libexec/bin/python -m pip install pandas numpy pybind11 biopython
 PYTHON=/opt/homebrew/Cellar/pymol/3.1.0_3/libexec/bin/python make clean
 PYTHON=/opt/homebrew/Cellar/pymol/3.1.0_3/libexec/bin/python make
 ```
