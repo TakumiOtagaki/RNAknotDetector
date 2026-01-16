@@ -45,18 +45,8 @@ struct LoopBuildOptions {
   bool include_multi = false;
 };
 
-// Build closed elements (loops) from base pairs.
-// Each loop corresponds to an outer closing pair (i, j) and immediate child pairs.
-// boundary_residues holds unpaired residues on the loop boundary (minimal set).
-// Placeholder: no surface generation and no validation for crossing pairs.
 std::vector<Loop> BuildLoops(const std::vector<BasePair> &base_pairs,
                              int n_res,
                              const LoopBuildOptions &options = {});
-
-// Collect closing pairs that belong to multi-loops.
-// Placeholder: used for PyMOL debug coloring.
-std::vector<BasePair> CollectMultiLoopPairs(const std::vector<BasePair> &base_pairs,
-                                            int n_res,
-                                            const LoopBuildOptions &options = {});
 
 }  // namespace rna

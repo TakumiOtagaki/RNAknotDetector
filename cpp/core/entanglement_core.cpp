@@ -139,29 +139,4 @@ std::vector<Loop> BuildLoops(const std::vector<BasePair> &base_pairs,
   return loops;
 }
 
-std::vector<BasePair> CollectMultiLoopPairs(const std::vector<BasePair> &base_pairs,
-                                            int n_res,
-                                            const LoopBuildOptions &options) {
-  LoopBuildOptions opts = options;
-  opts.include_multi = true;
-  std::vector<Loop> loops = BuildLoops(base_pairs, n_res, opts);
-  std::vector<BasePair> result;
-  std::unordered_set<long long> seen;
-
-  for (const auto &loop : loops) {
-    if (loop.kind != LoopKind::kMulti) {
-      continue;
-    }
-    for (const auto &pair : loop.closing_pairs) {
-      int i = std::min(pair.i, pair.j);
-      int j = std::max(pair.i, pair.j);
-      long long key = (static_cast<long long>(i) << 32) | j;
-      if (seen.insert(key).second) {
-        result.push_back(BasePair{i, j, pair.bp_type});
-      }
-    }
-  }
-  return result;
-}
-
 }  // namespace rna
