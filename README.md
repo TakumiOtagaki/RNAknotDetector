@@ -25,4 +25,15 @@ PYTHON=/opt/homebrew/Cellar/pymol/3.1.0_3/libexec/bin/python make
 
 ```pymol console
 print_main_layer_pairs 6t3r, A, /Users/ootagakitakumi/RNAknotDetector/examples/6t3r.secstruct
+color_main_layer_pairs 6t3r, A, /Users/ootagakitakumi/RNAknotDetector/examples/6t3r.secstruct, pink
 ```
+
+
+```pymol console
+load /Users/ootagakitakumi/RNAknotDetector/examples/Example02.pdb
+print_main_layer_pairs Example02, A, /Users/ootagakitakumi/RNAknotDetector/examples/Example02.secstruct
+color_main_layer_pairs Example02, A, /Users/ootagakitakumi/RNAknotDetector/examples/Example02.secstruct, pink
+# pkv Example02
+```
+
+pseudoknot visualizer の出力と一致することを 6t3r と Example02 で確認しておいた
