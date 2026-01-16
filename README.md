@@ -9,3 +9,7 @@ It is used as a minimal placeholder for surface generation.
 - hairpin: unpaired residues in (i+1 .. j-1)
 - internal/bulge: unpaired residues between outer (i,j) and inner (k,l) pairs
 - multi: unpaired residues in (i+1 .. j-1) (coarse placeholder)
+
+### PyMOL debug (multi-loop coloring)
+`python/pymol_debug.py` exposes `color_multiloop_pairs` for quick coloring.
+It expects a pybind11 module named `rnaknotdetector_core` to be built.
