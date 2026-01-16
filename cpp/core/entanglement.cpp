@@ -1,4 +1,7 @@
 #include "entanglement.h"
+#include "coord_utils.h"
+#include "loop_utils.h"
+#include "pair_utils.h"
 #include "pseudoknot_decomposition.h"
 
 #include <algorithm>
@@ -10,142 +13,13 @@
 namespace rna {
 namespace {
 
-std::vector<int> BuildPairMap(const std::vector<BasePair> &base_pairs, int n_res) {
-  std::vector<int> pair_map(n_res + 1, 0);
-  for (const auto &bp : base_pairs) {
-    if (bp.i <= 0 || bp.j <= 0 || bp.i > n_res || bp.j > n_res) {
-      throw std::invalid_argument("Base pair index out of range");
-    }
-    if (bp.i == bp.j) {
-      throw std::invalid_argument("Base pair cannot be self-paired");
-    }
-    int i = std::min(bp.i, bp.j);
-    int j = std::max(bp.i, bp.j);
-    if (pair_map[i] != 0 || pair_map[j] != 0) {
-      throw std::invalid_argument("Residue paired multiple times");
-    }
-    pair_map[i] = j;
-    pair_map[j] = i;
-  }
-  return pair_map;
-}
-
-bool IsPaired(const std::vector<int> &pair_map, int idx) {
-  return pair_map[idx] != 0;
-}
-
-
-std::vector<int> CollectUnpaired(const std::vector<int> &pair_map, int start, int end) {
-  std::vector<int> residues;
-  for (int k = start; k <= end; ++k) {
-    if (!IsPaired(pair_map, k)) {
-      residues.push_back(k);
-    }
-  }
-  return residues;
-}
-
-// Find immediate child base pairs inside (i, j).
-// A child pair is the first paired region encountered when scanning the
-// interval; nested pairs inside that region are ignored.
-// Used to count how many stems close the loop bounded by (i, j).
-std::vector<BasePair> FindChildPairs(const std::vector<int> &pair_map, int i, int j) {
-  std::vector<BasePair> child_pairs;
-  int depth = 0;
-  for (int idx = i + 1; idx <= j - 1; ++idx) {
-    if (!IsPaired(pair_map, idx)) {
-      continue;
-    }
-    int partner = pair_map[idx];
-    if (idx < partner) {
-      if (depth == 0) {
-        child_pairs.push_back(BasePair{idx, partner, BasePair::Type::kUnclassified});
-      }
-      depth++;
-    } else if (idx > partner) {
-      depth--;
-    }
-  }
-  return child_pairs;
-}
-
-// Classify loop by counting immediate child pairs within (i, j).
-// closing_pairs includes the outer pair (i, j) and each immediate child pair.
-// boundary collects unpaired residues that lie on the loop boundary.
-// Rules: 0 child -> hairpin, 1 child -> internal/bulge/stacking, 2+ -> multi.
-LoopKind ClassifyLoop(const std::vector<int> &pair_map,
-                      int i,
-                      int j,
-                      std::vector<int> *boundary,
-                      std::vector<BasePair> *closing_pairs) {
-  closing_pairs->clear();
-  closing_pairs->push_back(BasePair{i, j, BasePair::Type::kUnclassified});
-
-  std::vector<BasePair> child_pairs = FindChildPairs(pair_map, i, j);
-  closing_pairs->insert(closing_pairs->end(), child_pairs.begin(), child_pairs.end());
-
-  if (child_pairs.empty()) {
-    *boundary = CollectUnpaired(pair_map, i + 1, j - 1);
-    return LoopKind::kHairpin;
-  }
-  if (child_pairs.size() == 1) {
-    int k = std::min(child_pairs[0].i, child_pairs[0].j);
-    int l = std::max(child_pairs[0].i, child_pairs[0].j);
-    auto left = CollectUnpaired(pair_map, i + 1, k - 1);
-    auto right = CollectUnpaired(pair_map, l + 1, j - 1);
-    boundary->clear();
-    boundary->reserve(left.size() + right.size());
-    boundary->insert(boundary->end(), left.begin(), left.end());
-    boundary->insert(boundary->end(), right.begin(), right.end());
-    return LoopKind::kInternal;
-  }
-
-  *boundary = CollectUnpaired(pair_map, i + 1, j - 1);
-  return LoopKind::kMulti;
-}
-
-struct CoordMap {
-  int n_res = 0;
-  std::vector<Vec3> coords;
-  std::vector<char> has_coord;
-};
-
-struct Segment {
-  int id = 0;
-  Vec3 a;
-  Vec3 b;
-};
-
-CoordMap BuildCoordMap(const std::vector<ResidueCoord> &coords, int atom_index) {
-  int max_index = 0;
-  for (const auto &res : coords) {
-    max_index = std::max(max_index, res.res_index);
-  }
-  CoordMap map;
-  map.n_res = max_index;
-  map.coords.resize(max_index + 1);
-  map.has_coord.assign(max_index + 1, 0);
-  for (const auto &res : coords) {
-    if (res.res_index <= 0 || res.res_index > max_index) {
-      continue;
-    }
-    if (atom_index < 0 || atom_index >= static_cast<int>(res.atoms.size())) {
-      continue;
-    }
-    map.coords[res.res_index] = res.atoms[atom_index];
-    map.has_coord[res.res_index] = 1;
-  }
-  return map;
-}
-
 std::vector<int> BuildSkipResidues(const Loop &loop) {
   std::vector<int> skip;
   if (loop.closing_pairs.empty()) {
     return skip;
   }
   if (loop.kind == LoopKind::kHairpin) {
-    int i = std::min(loop.closing_pairs[0].i, loop.closing_pairs[0].j);
-    int j = std::max(loop.closing_pairs[0].i, loop.closing_pairs[0].j);
+    auto [i, j] = SortedPair(loop.closing_pairs[0]);
     for (int k = i; k <= j; ++k) {
       skip.push_back(k);
     }
@@ -153,17 +27,14 @@ std::vector<int> BuildSkipResidues(const Loop &loop) {
   }
   if (loop.kind == LoopKind::kInternal) {
     if (loop.closing_pairs.size() < 2) {
-      int i = std::min(loop.closing_pairs[0].i, loop.closing_pairs[0].j);
-      int j = std::max(loop.closing_pairs[0].i, loop.closing_pairs[0].j);
+      auto [i, j] = SortedPair(loop.closing_pairs[0]);
       for (int k = i; k <= j; ++k) {
         skip.push_back(k);
       }
       return skip;
     }
-    int i = std::min(loop.closing_pairs[0].i, loop.closing_pairs[0].j);
-    int j = std::max(loop.closing_pairs[0].i, loop.closing_pairs[0].j);
-    int k = std::min(loop.closing_pairs[1].i, loop.closing_pairs[1].j);
-    int l = std::max(loop.closing_pairs[1].i, loop.closing_pairs[1].j);
+    auto [i, j] = SortedPair(loop.closing_pairs[0]);
+    auto [k, l] = SortedPair(loop.closing_pairs[1]);
     for (int idx = i; idx <= k; ++idx) {
       skip.push_back(idx);
     }
@@ -270,9 +141,7 @@ std::vector<Surface> BuildSurfaces(const std::vector<ResidueCoord> &coords,
       std::vector<std::pair<int, int>> pairs;
       pairs.reserve(loop.closing_pairs.size());
       for (const auto &pair : loop.closing_pairs) {
-        int i = std::min(pair.i, pair.j);
-        int j = std::max(pair.i, pair.j);
-        pairs.emplace_back(i, j);
+        pairs.push_back(SortedPair(pair));
       }
       std::sort(pairs.begin(), pairs.end());
       if (!pairs.empty()) {
@@ -311,15 +180,12 @@ std::vector<Surface> BuildSurfaces(const std::vector<ResidueCoord> &coords,
           add_index(res_index);
         }
       } else if (loop.kind == LoopKind::kHairpin) {
-        int i = std::min(loop.closing_pairs[0].i, loop.closing_pairs[0].j);
-        int j = std::max(loop.closing_pairs[0].i, loop.closing_pairs[0].j);
+        auto [i, j] = SortedPair(loop.closing_pairs[0]);
         add_range(i, j);
       } else if (loop.kind == LoopKind::kInternal) {
-        int i = std::min(loop.closing_pairs[0].i, loop.closing_pairs[0].j);
-        int j = std::max(loop.closing_pairs[0].i, loop.closing_pairs[0].j);
+        auto [i, j] = SortedPair(loop.closing_pairs[0]);
         if (loop.closing_pairs.size() >= 2) {
-          int h = std::min(loop.closing_pairs[1].i, loop.closing_pairs[1].j);
-          int l = std::max(loop.closing_pairs[1].i, loop.closing_pairs[1].j);
+          auto [h, l] = SortedPair(loop.closing_pairs[1]);
           add_range(i, h - 1);
           add_index(h);
           add_index(l);

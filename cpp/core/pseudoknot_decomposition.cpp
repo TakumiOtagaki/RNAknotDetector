@@ -1,4 +1,5 @@
 #include "pseudoknot_decomposition.h"
+#include "pair_utils.h"
 
 #include <algorithm>
 #include <cstdint>
@@ -159,8 +160,7 @@ std::vector<BasePair> ExtractMainLayerFromBasePairs(
     if (bp.i == bp.j) {
       throw std::invalid_argument("Base pair cannot be self-paired");
     }
-    int i = std::min(bp.i, bp.j);
-    int j = std::max(bp.i, bp.j);
+    auto [i, j] = SortedPair(bp);
     pairs.emplace_back(i, j);
     type_map.emplace(PairKey(i, j), bp.bp_type);
   }
