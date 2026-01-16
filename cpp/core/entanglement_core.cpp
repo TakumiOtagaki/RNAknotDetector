@@ -1,8 +1,8 @@
 #include "entanglement_core.h"
+#include "pseudoknot_decomposition.h"
 
 #include <algorithm>
 #include <stdexcept>
-#include <unordered_set>
 
 namespace rna {
 namespace {
@@ -30,6 +30,7 @@ std::vector<int> BuildPairMap(const std::vector<BasePair> &base_pairs, int n_res
 bool IsPaired(const std::vector<int> &pair_map, int idx) {
   return pair_map[idx] != 0;
 }
+
 
 std::vector<int> CollectUnpaired(const std::vector<int> &pair_map, int start, int end) {
   std::vector<int> residues;
@@ -114,7 +115,11 @@ std::vector<Loop> BuildLoops(const std::vector<BasePair> &base_pairs,
     throw std::invalid_argument("n_res must be positive");
   }
   // Placeholder: assumes pseudoknot-free input; no validation for crossing pairs.
-  std::vector<int> pair_map = BuildPairMap(base_pairs, n_res);
+  std::vector<BasePair> filtered_pairs = base_pairs;
+  if (options.main_layer_only) {
+    filtered_pairs = ExtractMainLayer(base_pairs);
+  }
+  std::vector<int> pair_map = BuildPairMap(filtered_pairs, n_res);
 
   std::vector<Loop> loops;
   int loop_id = 1;
@@ -137,6 +142,13 @@ std::vector<Loop> BuildLoops(const std::vector<BasePair> &base_pairs,
     loops.push_back(std::move(loop));
   }
   return loops;
+}
+
+std::vector<BasePair> ExtractMainLayer(const std::vector<BasePair> &base_pairs) {
+  if (base_pairs.empty()) {
+    return {};
+  }
+  return ExtractMainLayerFromBasePairs(base_pairs);
 }
 
 }  // namespace rna

@@ -43,4 +43,19 @@ PYBIND11_MODULE(rnaknotdetector_core, m) {
       py::arg("bp_list"),
       py::arg("n_res"),
       "Return closing pairs that belong to multi-loops.");
+
+  m.def(
+      "get_main_layer_pairs",
+      [](const std::vector<std::pair<int, int>> &bp_list) {
+        auto pairs = ToBasePairs(bp_list, rna::BasePair::Type::kCanonical);
+        auto main_pairs = rna::ExtractMainLayer(pairs);
+        std::vector<std::pair<int, int>> result;
+        result.reserve(main_pairs.size());
+        for (const auto &pair : main_pairs) {
+          result.emplace_back(pair.i, pair.j);
+        }
+        return result;
+      },
+      py::arg("bp_list"),
+      "Return base pairs in the main (maximum) pseudoknot-free layer.");
 }

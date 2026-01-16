@@ -43,10 +43,13 @@ struct Loop {
 
 struct LoopBuildOptions {
   bool include_multi = false;
+  bool main_layer_only = false;
 };
 
 std::vector<Loop> BuildLoops(const std::vector<BasePair> &base_pairs,
                              int n_res,
                              const LoopBuildOptions &options = {});
+
+std::vector<BasePair> ExtractMainLayer(const std::vector<BasePair> &base_pairs);
 
 }  // namespace rna
