@@ -13,6 +13,7 @@
 namespace rna {
 namespace {
 
+// 例えば hairpin closing (i, j) の polygon に関して、線分 (i, j) などはスキップするべき。そういう操作。
 std::vector<int> BuildSkipResidues(const Loop &loop) {
   std::vector<int> skip;
   if (loop.closing_pairs.empty()) {
@@ -46,6 +47,15 @@ std::vector<int> BuildSkipResidues(const Loop &loop) {
   return skip;
 }
 
+
+// HitKey は (loop_id, segment_id) の組を一意に識別するキーを作るための関数です。
+// EvaluateEntanglement 内で unordered_set<int64_t> hit_keys に入れて、同じループ×線分の重複カウントを防ぐ用途に使っています。
+// 具体的にはこう使っています（entanglement.cpp）:
+// - 交差が見つかったら HitKey(loop_id, segment_id) を作成
+// - そのキーが未登録なら hits に追加、既にあればスキップ
+// - つまり “ユニークなヒット数 = K” を保証する仕組みです
+//
+// もし loop_id や segment_id が 32bit を超えることがあるなら衝突するので、その場合は別のキー形式に変える必要があります。
 int64_t HitKey(int loop_id, int segment_id) {
   return (static_cast<int64_t>(loop_id) << 32) | static_cast<uint32_t>(segment_id);
 }

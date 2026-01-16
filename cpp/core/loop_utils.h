@@ -31,6 +31,7 @@ inline bool IsPaired(const std::vector<int> &pair_map, int idx) {
   return pair_map[idx] != 0;
 }
 
+// CollectUnpaired は、pair_map を使って 指定された区間 [start, end] にある「未ペアの残基インデックス」だけを集める関数です。
 inline std::vector<int> CollectUnpaired(const std::vector<int> &pair_map, int start, int end) {
   std::vector<int> residues;
   for (int k = start; k <= end; ++k) {
