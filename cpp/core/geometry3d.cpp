@@ -195,4 +195,38 @@ bool SegmentPlaneIntersection(const Vec3 &a,
   return true;
 }
 
+bool SegmentIntersectsTriangle(const Vec3 &a,
+                               const Vec3 &b,
+                               const Triangle &tri,
+                               double eps,
+                               Vec3 *out_point) {
+  Vec3 dir = Sub(b, a);
+  Vec3 e1 = Sub(tri.b, tri.a);
+  Vec3 e2 = Sub(tri.c, tri.a);
+  Vec3 pvec = Cross(dir, e2);
+  double det = Dot(e1, pvec);
+  if (std::abs(det) < eps) {
+    return false;
+  }
+  double inv_det = 1.0 / det;
+  Vec3 tvec = Sub(a, tri.a);
+  double u = Dot(tvec, pvec) * inv_det;
+  if (u < 0.0 || u > 1.0) {
+    return false;
+  }
+  Vec3 qvec = Cross(tvec, e1);
+  double v = Dot(dir, qvec) * inv_det;
+  if (v < 0.0 || u + v > 1.0) {
+    return false;
+  }
+  double t = Dot(e2, qvec) * inv_det;
+  if (t <= 0.0 || t >= 1.0) {
+    return false;
+  }
+  if (out_point != nullptr) {
+    *out_point = Add(a, Scale(dir, t));
+  }
+  return true;
+}
+
 }  // namespace rna

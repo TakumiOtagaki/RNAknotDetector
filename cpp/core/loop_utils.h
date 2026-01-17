@@ -1,5 +1,7 @@
 #pragma once
 
+#include <algorithm>
+#include <limits>
 #include <stdexcept>
 #include <vector>
 
@@ -98,6 +100,56 @@ inline LoopKind ClassifyLoop(const std::vector<int> &pair_map,
 
   *boundary = CollectUnpaired(pair_map, i + 1, j - 1);
   return LoopKind::kMulti;
+}
+
+inline std::vector<int> BuildSkipResidues(const Loop &loop) {
+  std::vector<int> skip;
+  if (loop.closing_pairs.empty()) {
+    return skip;
+  }
+  if (loop.kind == LoopKind::kHairpin) {
+    auto [i, j] = SortedPair(loop.closing_pairs[0]);
+    for (int k = i; k <= j; ++k) {
+      skip.push_back(k);
+    }
+    return skip;
+  }
+  if (loop.kind == LoopKind::kInternal) {
+    if (loop.closing_pairs.size() < 2) {
+      auto [i, j] = SortedPair(loop.closing_pairs[0]);
+      for (int k = i; k <= j; ++k) {
+        skip.push_back(k);
+      }
+      return skip;
+    }
+    auto [i, j] = SortedPair(loop.closing_pairs[0]);
+    auto [k, l] = SortedPair(loop.closing_pairs[1]);
+    for (int idx = i; idx <= k; ++idx) {
+      skip.push_back(idx);
+    }
+    for (int idx = l; idx <= j; ++idx) {
+      skip.push_back(idx);
+    }
+    return skip;
+  }
+  if (loop.kind == LoopKind::kMulti) {
+    int min_res = std::numeric_limits<int>::max();
+    int max_res = std::numeric_limits<int>::min();
+    for (const auto &pair : loop.closing_pairs) {
+      auto [i, j] = SortedPair(pair);
+      min_res = std::min(min_res, i);
+      max_res = std::max(max_res, j);
+      skip.push_back(i);
+      skip.push_back(j);
+    }
+    if (min_res <= max_res) {
+      for (int idx = min_res; idx <= max_res; ++idx) {
+        skip.push_back(idx);
+      }
+    }
+    return skip;
+  }
+  return skip;
 }
 
 }  // namespace rna

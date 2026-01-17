@@ -43,46 +43,23 @@ double Cross2D(const Vec2 &a, const Vec2 &b, const Vec2 &c) {
   return abx * acy - aby * acx;
 }
 
-std::vector<Vec2> ConvexHull(std::vector<Vec2> points) {
+std::vector<Vec2> SortByAngle(std::vector<Vec2> points) {
   if (points.size() < 3) {
     return points;
   }
-  std::sort(points.begin(), points.end(), [](const Vec2 &a, const Vec2 &b) {
-    if (a.x == b.x) {
-      return a.y < b.y;
-    }
-    return a.x < b.x;
+  Vec2 center{0.0, 0.0};
+  for (const auto &v : points) {
+    center.x += v.x;
+    center.y += v.y;
+  }
+  center.x /= static_cast<double>(points.size());
+  center.y /= static_cast<double>(points.size());
+  std::sort(points.begin(), points.end(), [&center](const Vec2 &a, const Vec2 &b) {
+    double angle_a = std::atan2(a.y - center.y, a.x - center.x);
+    double angle_b = std::atan2(b.y - center.y, b.x - center.x);
+    return angle_a < angle_b;
   });
-  std::vector<Vec2> hull;
-  hull.reserve(points.size() * 2);
-  for (const auto &p : points) {
-    while (hull.size() >= 2) {
-      size_t n = hull.size();
-      if (Cross2D(hull[n - 2], hull[n - 1], p) <= 0.0) {
-        hull.pop_back();
-      } else {
-        break;
-      }
-    }
-    hull.push_back(p);
-  }
-  size_t lower_size = hull.size();
-  for (size_t i = points.size(); i-- > 0;) {
-    const auto &p = points[i];
-    while (hull.size() > lower_size) {
-      size_t n = hull.size();
-      if (Cross2D(hull[n - 2], hull[n - 1], p) <= 0.0) {
-        hull.pop_back();
-      } else {
-        break;
-      }
-    }
-    hull.push_back(p);
-  }
-  if (!hull.empty()) {
-    hull.pop_back();
-  }
-  return hull;
+  return points;
 }
 
 }  // namespace
@@ -101,7 +78,7 @@ Polygon2D ProjectPolygon(const std::vector<Vec3> &points, const Plane &plane) {
   if (vertices.size() < 3) {
     return poly;
   }
-  poly.vertices = ConvexHull(std::move(vertices));
+  poly.vertices = SortByAngle(std::move(vertices));
   poly.valid = poly.vertices.size() >= 3;
   return poly;
 }

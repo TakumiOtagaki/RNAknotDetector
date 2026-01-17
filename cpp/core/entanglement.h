@@ -42,12 +42,18 @@ struct LoopBuildOptions {
   bool main_layer_only = false;
 };
 
+enum class SurfaceMode {
+  kBestFitPlane,
+  kTrianglePlanes,
+};
+
 struct Surface {
   int loop_id = 0;
   LoopKind kind = LoopKind::kUnknown;
   std::vector<BasePair> closing_pairs;
   Plane plane;
   Polygon2D polygon;
+  std::vector<Triangle> triangles;
   std::vector<int> skip_residues;
 };
 
@@ -65,12 +71,14 @@ struct Result {
 struct SurfaceBuildOptions {
   int atom_index = 0;         // which atom in ResidueCoord::atoms to use
   double eps_collinear = 1e-6;  // ratio threshold for near-collinearity
+  SurfaceMode surface_mode = SurfaceMode::kTrianglePlanes;
 };
 
 struct EvaluateOptions {
   int atom_index = 0;
   double eps_plane = 1e-2;
   double eps_polygon = 1e-2;
+  double eps_triangle = 1e-8;
 };
 
 std::vector<Loop> BuildLoops(const std::vector<BasePair> &base_pairs,

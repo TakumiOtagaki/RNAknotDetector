@@ -14,6 +14,12 @@ struct Plane {
   bool valid = false;
 };
 
+struct Triangle {
+  Vec3 a;
+  Vec3 b;
+  Vec3 c;
+};
+
 Vec3 Add(const Vec3 &a, const Vec3 &b);
 Vec3 Sub(const Vec3 &a, const Vec3 &b);
 Vec3 Scale(const Vec3 &v, double s);
@@ -28,5 +34,10 @@ bool SegmentPlaneIntersection(const Vec3 &a,
                               const Plane &plane,
                               double eps_plane,
                               Vec3 *out_point);
+bool SegmentIntersectsTriangle(const Vec3 &a,
+                               const Vec3 &b,
+                               const Triangle &tri,
+                               double eps,
+                               Vec3 *out_point);
 
 }  // namespace rna
