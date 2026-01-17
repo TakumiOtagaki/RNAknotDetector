@@ -38,9 +38,10 @@ def main() -> int:
     parser.add_argument("--eps-polygon", type=float, default=1e-2)
     parser.add_argument("--eps-collinear", type=float, default=1e-6)
     parser.add_argument(
-        "--include-multi",
-        action="store_true",
-        help="Include multiloop surfaces when building loops.",
+        "--surface-mode",
+        type=int,
+        default=1,
+        help="Surface mode: 0=best-fit plane, 1=triangle planes.",
     )
     parser.add_argument(
         "--main-layer-only",
@@ -63,14 +64,14 @@ def main() -> int:
         loop_pairs = main_pairs
     else:
         loop_pairs = bp_list
-    loops = core.build_loops(
-        loop_pairs,
-        len(pair_map) - 1,
-        include_multi=args.include_multi,
-        main_layer_only=False,
-    )
+    loops = core.build_loops(loop_pairs, len(pair_map) - 1, main_layer_only=False)
     print(f"[debug] loops built = {len(loops)}")
-    surfaces = core.build_surfaces(coords_cpp, loops, eps_collinear=args.eps_collinear)
+    surfaces = core.build_surfaces(
+        coords_cpp,
+        loops,
+        eps_collinear=args.eps_collinear,
+        surface_mode=args.surface_mode,
+    )
     valid_surfaces = sum(1 for s in surfaces if s.plane.valid and s.polygon.valid)
     print(f"[debug] surfaces built = {len(surfaces)} valid = {valid_surfaces}")
     result = core.evaluate_entanglement(
