@@ -122,17 +122,14 @@ PYBIND11_MODULE(rnaknotdetector_core, m) {
       "build_loops",
       [](const std::vector<std::pair<int, int>> &bp_list,
          int n_res,
-         bool include_multi,
          bool main_layer_only) {
         auto pairs = ToBasePairs(bp_list, rna::BasePair::Type::kCanonical);
         rna::LoopBuildOptions options;
-        options.include_multi = include_multi;
         options.main_layer_only = main_layer_only;
         return rna::BuildLoops(pairs, n_res, options);
       },
       py::arg("bp_list"),
       py::arg("n_res"),
-      py::arg("include_multi") = false,
       py::arg("main_layer_only") = false,
       "Build loops from base pairs.");
 

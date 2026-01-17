@@ -38,7 +38,6 @@ struct Loop {
 };
 
 struct LoopBuildOptions {
-  bool include_multi = false;
   bool main_layer_only = false;
 };
 

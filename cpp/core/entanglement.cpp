@@ -25,6 +25,21 @@ int64_t HitKey(int loop_id, int segment_id) {
   return (static_cast<int64_t>(loop_id) << 32) | static_cast<uint32_t>(segment_id);
 }
 
+bool IsTargetMultiloop_debug(const std::vector<BasePair> &pairs) {
+  if (pairs.size() != 3) {
+    return false;
+  }
+  std::vector<std::pair<int, int>> sorted;
+  sorted.reserve(pairs.size());
+  for (const auto &pair : pairs) {
+    sorted.push_back(SortedPair(pair));
+  }
+  std::sort(sorted.begin(), sorted.end());
+  return sorted[0] == std::make_pair(63, 121) &&
+         sorted[1] == std::make_pair(70, 96) &&
+         sorted[2] == std::make_pair(98, 105);
+}
+
 }  // namespace
 
 
@@ -55,9 +70,6 @@ std::vector<Loop> BuildLoops(const std::vector<BasePair> &base_pairs,
     std::vector<int> boundary;
     std::vector<BasePair> closing_pairs;
     LoopKind kind = ClassifyLoop(pair_map, i, j, &boundary, &closing_pairs);
-    if (kind == LoopKind::kMulti && !options.include_multi) {
-      continue;
-    }
     Loop loop;
     loop.id = loop_id++;
     loop.kind = kind;
@@ -96,7 +108,8 @@ Result EvaluateEntanglement(const std::vector<ResidueCoord> &coords,
   std::unordered_set<int64_t> hit_keys;
   for (const auto &surface : surfaces) {
     bool watch_target_multiloop =
-        (surface.kind == LoopKind::kMulti && IsTargetMultiloop(surface.closing_pairs));
+        (surface.kind == LoopKind::kMulti &&
+         IsTargetMultiloop_debug(surface.closing_pairs));
     std::vector<char> skip_mask(map.n_res + 1, 0);
     for (int idx : surface.skip_residues) {
       if (idx > 0 && idx <= map.n_res) {
@@ -108,8 +121,6 @@ Result EvaluateEntanglement(const std::vector<ResidueCoord> &coords,
     int triangle_hits = 0;
     bool use_triangles = !surface.triangles.empty();
     if (!use_triangles && (!surface.plane.valid || !surface.polygon.valid)) {
-      std::cerr << "[debug] loop=" << surface.loop_id
-                << " skipped: invalid surface\n";
       continue;
     }
     for (const auto &segment : segments) {
@@ -222,11 +233,9 @@ Result EvaluateEntanglement(const std::vector<ResidueCoord> &coords,
         result.hits.push_back(HitInfo{surface.loop_id, segment.id, intersection});
       }
     }
-    std::cerr << "[debug] loop=" << surface.loop_id
-              << " candidates=" << candidate_segments
-              << " plane_hits=" << plane_hits
-              << " triangle_hits=" << triangle_hits
-              << " hits=" << result.hits.size() << "\n";
+    (void)candidate_segments;
+    (void)plane_hits;
+    (void)triangle_hits;
   }
   result.K = static_cast<int>(result.hits.size());
   return result;
