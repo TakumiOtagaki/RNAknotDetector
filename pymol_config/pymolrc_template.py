@@ -10,5 +10,5 @@ if PYTHON_DIR not in sys.path:
 from pymol import cmd
 
 print("Loading RNAknotDetector PyMOL helpers...")
-cmd.do(f"run {os.path.join(PYTHON_DIR, 'pymol_debug.py')}")
-
+# cmd.do(f"run {os.path.join(PYTHON_DIR, 'pymol_debug.py')}")
+cmd.do(f"run {os.path.join(PYTHON_DIR, 'pymol_rnaknot_hit.py')}")

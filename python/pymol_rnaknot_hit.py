@@ -211,6 +211,8 @@ def _draw_hit_objects(
         cgo.extend([VERTEX, tri[1][0], tri[1][1], tri[1][2]])
         cgo.extend([VERTEX, tri[2][0], tri[2][1], tri[2][2]])
         cgo.extend([END])
+    else:
+        _append_polygon_fan(cgo, surface)
     cgo.extend([COLOR, 0.1, 0.3, 0.8])
     cgo.extend(
         [
@@ -270,6 +272,35 @@ def _find_hit_triangle(
                 (tri.c.x, tri.c.y, tri.c.z),
             )
     return None
+
+
+def _append_polygon_fan(cgo, surface) -> None:
+    if not surface.plane.valid or not surface.polygon.valid:
+        return
+    vertices = surface.polygon.vertices
+    if vertices is None or len(vertices) < 3:
+        return
+    center_x = sum(v.x for v in vertices) / len(vertices)
+    center_y = sum(v.y for v in vertices) / len(vertices)
+    center = _plane_point(surface.plane, center_x, center_y)
+    cgo.extend([BEGIN, TRIANGLES])
+    for i in range(len(vertices)):
+        a2 = vertices[i]
+        b2 = vertices[(i + 1) % len(vertices)]
+        a3 = _plane_point(surface.plane, a2.x, a2.y)
+        b3 = _plane_point(surface.plane, b2.x, b2.y)
+        cgo.extend([VERTEX, center[0], center[1], center[2]])
+        cgo.extend([VERTEX, a3[0], a3[1], a3[2]])
+        cgo.extend([VERTEX, b3[0], b3[1], b3[2]])
+    cgo.extend([END])
+
+
+def _plane_point(plane, x: float, y: float) -> Tuple[float, float, float]:
+    return (
+        plane.c.x + plane.e1.x * x + plane.e2.x * y,
+        plane.c.y + plane.e1.y * x + plane.e2.y * y,
+        plane.c.z + plane.e1.z * x + plane.e2.z * y,
+    )
 
 
 def _segment_intersects_triangle(
