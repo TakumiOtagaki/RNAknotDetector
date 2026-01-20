@@ -123,6 +123,10 @@ Result EvaluateEntanglement(const std::vector<ResidueCoord> &coords,
     if (!use_triangles && (!surface.plane.valid || !surface.polygon.valid)) {
       continue;
     }
+    if (watch_target_multiloop) {
+      std::cerr << "[debug] target_multiloop triangles=" << surface.triangles.size()
+                << "\n";
+    }
     for (const auto &segment : segments) {
       int i = segment.id;
       bool watch_segment = debug_segments.count(i) > 0;
@@ -150,17 +154,38 @@ Result EvaluateEntanglement(const std::vector<ResidueCoord> &coords,
         }
         continue;
       }
+      if (watch_target_multiloop && i == 46) {
+        std::cerr << "[debug] target_multiloop segment46 a=("
+                  << segment.a.x << "," << segment.a.y << "," << segment.a.z
+                  << ") b=(" << segment.b.x << "," << segment.b.y << ","
+                  << segment.b.z << ")\n";
+        if (!surface.triangles.empty()) {
+          const auto &tri = surface.triangles.front();
+          std::cerr << "[debug] target_multiloop tri0 a=(" << tri.a.x << ","
+                    << tri.a.y << "," << tri.a.z << ") b=(" << tri.b.x << ","
+                    << tri.b.y << "," << tri.b.z << ") c=(" << tri.c.x << ","
+                    << tri.c.y << "," << tri.c.z << ")\n";
+        }
+      }
       candidate_segments++;
       Vec3 intersection;
       bool hit = false;
       if (use_triangles) {
+        int triangle_tests = 0;
         for (const auto &tri : surface.triangles) {
+          triangle_tests++;
           if (SegmentIntersectsTriangle(segment.a, segment.b, tri,
                                         options.eps_triangle, &intersection)) {
             hit = true;
             triangle_hits++;
             break;
           }
+        }
+        if (watch_target_multiloop && i == 46) {
+          std::cerr << "[debug] target_multiloop loop=" << surface.loop_id
+                    << " segment=46 triangle_"
+                    << (hit ? "hit" : "miss")
+                    << " tests=" << triangle_tests << "\n";
         }
       } else {
         if (!SegmentPlaneIntersection(segment.a, segment.b, surface.plane, options.eps_plane,
@@ -187,11 +212,11 @@ Result EvaluateEntanglement(const std::vector<ResidueCoord> &coords,
         Vec3 d = Sub(intersection, surface.plane.c);
         Vec2 q{Dot(d, surface.plane.e1), Dot(d, surface.plane.e2)};
         bool in_poly = PointInPolygon2D(q, surface.polygon, options.eps_polygon);
-        if (watch_target_multiloop && i == 46) {
-          std::cerr << "[debug] target_multiloop loop=" << surface.loop_id
-                    << " segment=46 in_polygon=" << in_poly
-                    << " q=(" << q.x << "," << q.y << ")\n";
-        }
+      if (watch_target_multiloop && i == 46) {
+        std::cerr << "[debug] target_multiloop loop=" << surface.loop_id
+                  << " segment=46 in_polygon=" << in_poly
+                  << " q=(" << q.x << "," << q.y << ")\n";
+      }
         if (watch_segment) {
           double min_x = 0.0;
           double min_y = 0.0;

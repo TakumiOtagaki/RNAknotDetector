@@ -1,6 +1,8 @@
 #include "surface_builder.h"
 
 #include <algorithm>
+#include <cmath>
+#include <iostream>
 
 #include "coord_utils.h"
 #include "geometry2d.h"
@@ -54,6 +56,19 @@ std::vector<int> BuildBoundaryIndices(const Loop &loop, int n_res) {
       } else {
         add_index(l);
         add_index(pairs.front().second);
+      }
+    }
+    if (loop.closing_pairs.size() == 3) {
+      std::vector<std::pair<int, int>> check = pairs;
+      if (check.size() == 3 &&
+          check[0] == std::make_pair(63, 121) &&
+          check[1] == std::make_pair(70, 96) &&
+          check[2] == std::make_pair(98, 105)) {
+        std::cerr << "[debug] target_multiloop boundary_indices:";
+        for (int idx : boundary_indices) {
+          std::cerr << " " << idx;
+        }
+        std::cerr << "\n";
       }
     }
     return boundary_indices;
@@ -129,20 +144,57 @@ std::vector<Surface> BuildSurfaces(const std::vector<ResidueCoord> &coords,
       surface.plane = FitPlane(boundary_points, options.eps_collinear);
       surface.polygon = ProjectPolygon(boundary_points, surface.plane);
     } else {
-      surface.plane.valid = false;
+      surface.plane = FitPlane(boundary_points, options.eps_collinear);
       surface.polygon.valid = false;
-      for (size_t i = 0; i + 2 < boundary_points.size(); ++i) {
-        for (size_t j = i + 1; j + 1 < boundary_points.size(); ++j) {
-          for (size_t k = j + 1; k < boundary_points.size(); ++k) {
-            Triangle tri{boundary_points[i], boundary_points[j], boundary_points[k]};
-            Vec3 ab = Sub(tri.b, tri.a);
-            Vec3 ac = Sub(tri.c, tri.a);
-            double area = Norm(Cross(ab, ac));
-            if (area <= options.eps_collinear) {
-              continue;
-            }
-            surface.triangles.push_back(tri);
+      surface.polygon.vertices.clear();
+      if (surface.plane.valid && boundary_points.size() >= 3) {
+        struct OrderedPoint {
+          Vec3 p;
+          Vec2 q;
+          double angle;
+        };
+        std::vector<OrderedPoint> ordered;
+        ordered.reserve(boundary_points.size());
+        Vec2 center{0.0, 0.0};
+        for (const auto &p : boundary_points) {
+          Vec3 d = Sub(p, surface.plane.c);
+          double x = Dot(d, surface.plane.e1);
+          double y = Dot(d, surface.plane.e2);
+          center.x += x;
+          center.y += y;
+        }
+        center.x /= static_cast<double>(boundary_points.size());
+        center.y /= static_cast<double>(boundary_points.size());
+        for (const auto &p : boundary_points) {
+          Vec3 d = Sub(p, surface.plane.c);
+          double x = Dot(d, surface.plane.e1);
+          double y = Dot(d, surface.plane.e2);
+          Vec3 proj = Add(surface.plane.c,
+                          Add(Scale(surface.plane.e1, x),
+                              Scale(surface.plane.e2, y)));
+          double angle = std::atan2(y - center.y, x - center.x);
+          ordered.push_back(OrderedPoint{proj, Vec2{x, y}, angle});
+        }
+        std::sort(ordered.begin(), ordered.end(),
+                  [](const OrderedPoint &a, const OrderedPoint &b) {
+                    return a.angle < b.angle;
+                  });
+        surface.polygon.vertices.clear();
+        surface.polygon.vertices.reserve(ordered.size());
+        for (const auto &point : ordered) {
+          surface.polygon.vertices.push_back(point.q);
+        }
+        surface.polygon.valid = surface.polygon.vertices.size() >= 3;
+        const Vec3 &p0 = ordered[0].p;
+        for (size_t i = 1; i + 1 < ordered.size(); ++i) {
+          Triangle tri{p0, ordered[i].p, ordered[i + 1].p};
+          Vec3 ab = Sub(tri.b, tri.a);
+          Vec3 ac = Sub(tri.c, tri.a);
+          double area = Norm(Cross(ab, ac));
+          if (area <= options.eps_collinear) {
+            continue;
           }
+          surface.triangles.push_back(tri);
         }
       }
     }
