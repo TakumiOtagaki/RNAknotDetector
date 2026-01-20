@@ -1,0 +1,3 @@
+[submodule "rna-tools"]
+	path = rna-tools
+	url = git@github.com:mmagnus/rna-tools.git
