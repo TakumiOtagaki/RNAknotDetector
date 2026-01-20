@@ -1,6 +1,7 @@
 #include "surface_builder.h"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <iostream>
 
@@ -18,6 +19,104 @@ struct OrderedPoint {
   Vec2 q;
   double angle;
 };
+
+double SignedArea2D(const std::vector<Vec2> &poly) {
+  if (poly.size() < 3) {
+    return 0.0;
+  }
+  double area = 0.0;
+  for (size_t i = 0; i < poly.size(); ++i) {
+    const Vec2 &a = poly[i];
+    const Vec2 &b = poly[(i + 1) % poly.size()];
+    area += a.x * b.y - a.y * b.x;
+  }
+  return 0.5 * area;
+}
+
+double Cross2D(const Vec2 &a, const Vec2 &b, const Vec2 &c) {
+  double abx = b.x - a.x;
+  double aby = b.y - a.y;
+  double acx = c.x - a.x;
+  double acy = c.y - a.y;
+  return abx * acy - aby * acx;
+}
+
+bool PointInTriangle2D(const Vec2 &p,
+                       const Vec2 &a,
+                       const Vec2 &b,
+                       const Vec2 &c,
+                       double eps) {
+  double c1 = Cross2D(a, b, p);
+  double c2 = Cross2D(b, c, p);
+  double c3 = Cross2D(c, a, p);
+  bool has_neg = (c1 < -eps) || (c2 < -eps) || (c3 < -eps);
+  bool has_pos = (c1 > eps) || (c2 > eps) || (c3 > eps);
+  return !(has_neg && has_pos);
+}
+
+std::vector<std::array<int, 3>> EarClipTriangulate(
+    const std::vector<Vec2> &poly,
+    double eps) {
+  std::vector<std::array<int, 3>> tris;
+  if (poly.size() < 3) {
+    return tris;
+  }
+  double area = SignedArea2D(poly);
+  if (std::abs(area) <= eps) {
+    return tris;
+  }
+  int orientation = (area > 0.0) ? 1 : -1;
+  std::vector<int> indices;
+  indices.reserve(poly.size());
+  for (size_t i = 0; i < poly.size(); ++i) {
+    indices.push_back(static_cast<int>(i));
+  }
+
+  int guard = 0;
+  while (indices.size() > 3 && guard < 10000) {
+    bool ear_found = false;
+    size_t n = indices.size();
+    for (size_t i = 0; i < n; ++i) {
+      int i_prev = indices[(i + n - 1) % n];
+      int i_curr = indices[i];
+      int i_next = indices[(i + 1) % n];
+      const Vec2 &a = poly[i_prev];
+      const Vec2 &b = poly[i_curr];
+      const Vec2 &c = poly[i_next];
+      double cross = Cross2D(a, b, c);
+      if (orientation * cross <= eps) {
+        continue;
+      }
+      bool has_inside = false;
+      for (size_t k = 0; k < n; ++k) {
+        int idx = indices[k];
+        if (idx == i_prev || idx == i_curr || idx == i_next) {
+          continue;
+        }
+        if (PointInTriangle2D(poly[idx], a, b, c, eps)) {
+          has_inside = true;
+          break;
+        }
+      }
+      if (has_inside) {
+        continue;
+      }
+      tris.push_back({i_prev, i_curr, i_next});
+      indices.erase(indices.begin() + static_cast<long>(i));
+      ear_found = true;
+      break;
+    }
+    if (!ear_found) {
+      tris.clear();
+      return tris;
+    }
+    guard++;
+  }
+  if (indices.size() == 3) {
+    tris.push_back({indices[0], indices[1], indices[2]});
+  }
+  return tris;
+}
 
 std::vector<OrderedPoint> OrderPointsByAngle(const std::vector<Vec3> &points,
                                              const Plane &plane) {
@@ -152,24 +251,33 @@ std::vector<Surface> BuildSurfaces(const std::vector<ResidueCoord> &coords,
       surface.polygon.valid = false;
       surface.polygon.vertices.clear();
       if (surface.plane.valid && boundary_points.size() >= 3) {
-        std::vector<OrderedPoint> ordered =
-            OrderPointsByAngle(boundary_points, surface.plane);
-        surface.polygon.vertices.clear();
-        surface.polygon.vertices.reserve(ordered.size());
-        for (const auto &point : ordered) {
-          surface.polygon.vertices.push_back(point.q);
+        std::vector<Vec2> poly2d;
+        std::vector<Vec3> poly3d;
+        poly2d.reserve(boundary_points.size());
+        poly3d.reserve(boundary_points.size());
+        for (const auto &p : boundary_points) {
+          Vec3 d = Sub(p, surface.plane.c);
+          double x = Dot(d, surface.plane.e1);
+          double y = Dot(d, surface.plane.e2);
+          Vec3 proj = Add(surface.plane.c,
+                          Add(Scale(surface.plane.e1, x),
+                              Scale(surface.plane.e2, y)));
+          poly2d.push_back(Vec2{x, y});
+          poly3d.push_back(proj);
         }
+        surface.polygon.vertices = poly2d;
         surface.polygon.valid = surface.polygon.vertices.size() >= 3;
-        const Vec3 &p0 = ordered[0].p;
-        for (size_t i = 1; i + 1 < ordered.size(); ++i) {
-          Triangle tri{p0, ordered[i].p, ordered[i + 1].p};
-          Vec3 ab = Sub(tri.b, tri.a);
-          Vec3 ac = Sub(tri.c, tri.a);
+        std::vector<std::array<int, 3>> tris =
+            EarClipTriangulate(poly2d, 1e-12);
+        for (const auto &tri : tris) {
+          Triangle t{poly3d[tri[0]], poly3d[tri[1]], poly3d[tri[2]]};
+          Vec3 ab = Sub(t.b, t.a);
+          Vec3 ac = Sub(t.c, t.a);
           double area = Norm(Cross(ab, ac));
           if (area <= options.eps_collinear) {
             continue;
           }
-          surface.triangles.push_back(tri);
+          surface.triangles.push_back(t);
         }
       }
     }

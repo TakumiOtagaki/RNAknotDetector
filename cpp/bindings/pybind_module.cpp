@@ -88,6 +88,12 @@ PYBIND11_MODULE(rnaknotdetector_core, m) {
       .def_readwrite("e2", &rna::Plane::e2)
       .def_readwrite("valid", &rna::Plane::valid);
 
+  py::class_<rna::Triangle>(m, "Triangle")
+      .def(py::init<>())
+      .def_readwrite("a", &rna::Triangle::a)
+      .def_readwrite("b", &rna::Triangle::b)
+      .def_readwrite("c", &rna::Triangle::c);
+
   py::class_<rna::Polygon2D>(m, "Polygon2D")
       .def(py::init<>())
       .def_readwrite("vertices", &rna::Polygon2D::vertices)
@@ -99,6 +105,7 @@ PYBIND11_MODULE(rnaknotdetector_core, m) {
       .def_readwrite("kind", &rna::Surface::kind)
       .def_readwrite("plane", &rna::Surface::plane)
       .def_readwrite("polygon", &rna::Surface::polygon)
+      .def_readwrite("triangles", &rna::Surface::triangles)
       .def_readwrite("skip_residues", &rna::Surface::skip_residues);
 
   py::class_<rna::HitInfo>(m, "HitInfo")
