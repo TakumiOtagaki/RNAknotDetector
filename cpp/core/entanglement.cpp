@@ -50,9 +50,24 @@ std::vector<Segment> BuildSegments(const CoordMap &map) {
     if (!map.has_coord[i] || !map.has_coord[i + 1]) {
       continue;
     }
-    segments.push_back(Segment{i, map.coords[i], map.coords[i + 1]});
+    segments.push_back(
+        Segment{i, i, i + 1, AtomKind::kSingle, AtomKind::kSingle, map.coords[i], map.coords[i + 1]});
   }
   return segments;
+}
+
+std::vector<Segment> BuildSegmentsSingleAtom(const std::vector<ResidueCoord> &coords,
+                                             int atom_index) {
+  CoordMap map = BuildCoordMap(coords, atom_index);
+  return BuildSegments(map);
+}
+
+std::vector<Segment> BuildSegmentsPC4(const std::vector<ResidueCoord> &coords,
+                                      int atom_index_p,
+                                      int atom_index_c4) {
+  std::vector<PolylinePoint> points =
+      BuildPolylinePoints(coords, atom_index_p, atom_index_c4);
+  return BuildSegmentsFromPolyline(points);
 }
 
 std::vector<char> BuildSkipMask(const Surface &surface, int n_res) {
@@ -117,7 +132,12 @@ Result EvaluateEntanglement(const std::vector<ResidueCoord> &coords,
                             const EvaluateOptions &options) {
   Result result;
   CoordMap map = BuildCoordMap(coords, options.atom_index);
-  std::vector<Segment> segments = BuildSegments(map);
+  std::vector<Segment> segments;
+  if (options.polyline_mode == EvaluateOptions::PolylineMode::kPC4Alternating) {
+    segments = BuildSegmentsPC4(coords, options.atom_index_p, options.atom_index_c4);
+  } else {
+    segments = BuildSegments(map);
+  }
   if (segments.empty()) {
     return result;
   }
@@ -138,8 +158,10 @@ Result EvaluateEntanglement(const std::vector<ResidueCoord> &coords,
                 << "\n";
     }
     for (const auto &segment : segments) {
-      int i = segment.id;
-      bool watch_segment = debug_segments.count(i) > 0;
+      int segment_index = segment.id;
+      int res_a = segment.res_a;
+      int res_b = segment.res_b;
+      bool watch_segment = debug_segments.count(segment_index) > 0;
       auto log_with_loop = [&](const char *status) {
         std::cerr << "[debug] loop=" << surface.loop_id
                   << " type=" << static_cast<int>(surface.kind)
@@ -151,11 +173,12 @@ Result EvaluateEntanglement(const std::vector<ResidueCoord> &coords,
             std::cerr << ",";
           }
         }
-        std::cerr << " segment=(" << i << "," << i + 1 << ") " << status;
+        std::cerr << " segment=(" << res_a << "," << res_b << ") " << status;
       };
 
-      if (skip_mask[i] || skip_mask[i + 1]) {
-        if (watch_target_multiloop && i == 46) {
+      if ((res_a > 0 && res_a <= map.n_res && skip_mask[res_a]) ||
+          (res_b > 0 && res_b <= map.n_res && skip_mask[res_b])) {
+        if (watch_target_multiloop && segment_index == 46) {
           std::cerr << "[debug] target_multiloop loop=" << surface.loop_id
                     << " segment=46 skipped_by_mask\n";
         }
@@ -164,7 +187,7 @@ Result EvaluateEntanglement(const std::vector<ResidueCoord> &coords,
         }
         continue;
       }
-      if (watch_target_multiloop && i == 46) {
+      if (watch_target_multiloop && segment_index == 46) {
         std::cerr << "[debug] target_multiloop segment46 a=("
                   << segment.a.x << "," << segment.a.y << "," << segment.a.z
                   << ") b=(" << segment.b.x << "," << segment.b.y << ","
@@ -189,7 +212,7 @@ Result EvaluateEntanglement(const std::vector<ResidueCoord> &coords,
             break;
           }
         }
-        if (watch_target_multiloop && i == 46) {
+        if (watch_target_multiloop && segment_index == 46) {
           std::cerr << "[debug] target_multiloop loop=" << surface.loop_id
                     << " segment=46 triangle_"
                     << (hit ? "hit" : "miss")
@@ -198,7 +221,7 @@ Result EvaluateEntanglement(const std::vector<ResidueCoord> &coords,
       } else {
         if (!SegmentPlaneIntersection(segment.a, segment.b, surface.plane, options.eps_plane,
                                       &intersection)) {
-          if (watch_target_multiloop && i == 46) {
+          if (watch_target_multiloop && segment_index == 46) {
             double d_a = Dot(Sub(segment.a, surface.plane.c), surface.plane.n_hat);
             double d_b = Dot(Sub(segment.b, surface.plane.c), surface.plane.n_hat);
             std::cerr << "[debug] target_multiloop loop=" << surface.loop_id
@@ -210,7 +233,7 @@ Result EvaluateEntanglement(const std::vector<ResidueCoord> &coords,
           }
           continue;
         }
-        if (watch_target_multiloop && i == 46) {
+        if (watch_target_multiloop && segment_index == 46) {
           std::cerr << "[debug] target_multiloop loop=" << surface.loop_id
                     << " segment=46 plane_hit"
                     << " point=(" << intersection.x << "," << intersection.y << ","
@@ -219,7 +242,7 @@ Result EvaluateEntanglement(const std::vector<ResidueCoord> &coords,
         Vec3 d = Sub(intersection, surface.plane.c);
         Vec2 q{Dot(d, surface.plane.e1), Dot(d, surface.plane.e2)};
         bool in_poly = PointInPolygon2D(q, surface.polygon, options.eps_polygon);
-        if (watch_target_multiloop && i == 46) {
+        if (watch_target_multiloop && segment_index == 46) {
           std::cerr << "[debug] target_multiloop loop=" << surface.loop_id
                     << " segment=46 in_polygon=" << in_poly
                     << " q=(" << q.x << "," << q.y << ")\n";
@@ -262,7 +285,14 @@ Result EvaluateEntanglement(const std::vector<ResidueCoord> &coords,
       }
       int64_t key = HitKey(surface.loop_id, segment.id);
       if (hit_keys.insert(key).second) {
-        result.hits.push_back(HitInfo{surface.loop_id, segment.id, intersection});
+        result.hits.push_back(
+            HitInfo{surface.loop_id,
+                    segment.id,
+                    segment.res_a,
+                    segment.res_b,
+                    segment.atom_a,
+                    segment.atom_b,
+                    intersection});
       }
     }
   }

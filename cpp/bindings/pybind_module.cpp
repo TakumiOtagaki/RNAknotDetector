@@ -55,6 +55,15 @@ PYBIND11_MODULE(rnaknotdetector_core, m) {
       .value("MULTI", rna::LoopKind::kMulti)
       .value("UNKNOWN", rna::LoopKind::kUnknown);
 
+  py::enum_<rna::AtomKind>(m, "AtomKind")
+      .value("SINGLE", rna::AtomKind::kSingle)
+      .value("P", rna::AtomKind::kP)
+      .value("C4", rna::AtomKind::kC4);
+
+  py::enum_<rna::EvaluateOptions::PolylineMode>(m, "PolylineMode")
+      .value("SINGLE_ATOM", rna::EvaluateOptions::PolylineMode::kSingleAtom)
+      .value("PC4_ALTERNATING", rna::EvaluateOptions::PolylineMode::kPC4Alternating);
+
   py::class_<rna::BasePair>(m, "BasePair")
       .def(py::init<int, int, rna::BasePair::Type>(),
            py::arg("i"),
@@ -96,6 +105,10 @@ PYBIND11_MODULE(rnaknotdetector_core, m) {
       .def(py::init<>())
       .def_readwrite("loop_id", &rna::HitInfo::loop_id)
       .def_readwrite("segment_id", &rna::HitInfo::segment_id)
+      .def_readwrite("res_a", &rna::HitInfo::res_a)
+      .def_readwrite("res_b", &rna::HitInfo::res_b)
+      .def_readwrite("atom_a", &rna::HitInfo::atom_a)
+      .def_readwrite("atom_b", &rna::HitInfo::atom_b)
       .def_readwrite("point", &rna::HitInfo::point);
 
   py::class_<rna::Result>(m, "Result")
@@ -158,10 +171,17 @@ PYBIND11_MODULE(rnaknotdetector_core, m) {
       [](const std::vector<rna::ResidueCoord> &coords,
          const std::vector<rna::Surface> &surfaces,
          int atom_index,
+         int atom_index_p,
+         int atom_index_c4,
+         int polyline_mode,
          double eps_plane,
          double eps_polygon) {
         rna::EvaluateOptions options;
         options.atom_index = atom_index;
+        options.atom_index_p = atom_index_p;
+        options.atom_index_c4 = atom_index_c4;
+        options.polyline_mode =
+            static_cast<rna::EvaluateOptions::PolylineMode>(polyline_mode);
         options.eps_plane = eps_plane;
         options.eps_polygon = eps_polygon;
         return rna::EvaluateEntanglement(coords, surfaces, options);
@@ -169,7 +189,25 @@ PYBIND11_MODULE(rnaknotdetector_core, m) {
       py::arg("coords"),
       py::arg("surfaces"),
       py::arg("atom_index") = 0,
+      py::arg("atom_index_p") = 0,
+      py::arg("atom_index_c4") = 1,
+      py::arg("polyline_mode") =
+          static_cast<int>(rna::EvaluateOptions::PolylineMode::kSingleAtom),
       py::arg("eps_plane") = 1e-2,
       py::arg("eps_polygon") = 1e-2,
       "Evaluate entanglement for surfaces.");
 }
+
+
+Loop 1 (2D: 64-69, 97-98, 105-120); IP1> A: A149, C4' - A: G150, P
+Loop 2 (2D: 47-48, 142-154, 165-168); IP2> A: C113, P - A: C113, C4'
+
+
+Dinucleotide step 1 (2D: 43-44, 171-172); IP3> A: U154, P - A: U154, C4'
+Loop 2 (2D: 47-48, 142-154, 165-168); IP4> A: G44, B - A: C171, C4'
+
+Loop 2 (2D: 47-48, 142-154, 165-168); IP5> A: G45, B - A: C170, C4'
+Dinucleotide step 2 (2D: 44-45, 170-171); IP6> A: C171, C4' - A: G44, B
+
+Loop 2 (2D: 47-48, 142-154, 165-168); IP7> A: G46, B - A: U169, C4'
+Dinucleotide step 3 (2D: 45-46, 169-170); IP8> A: C170, C4' - A: G45, B

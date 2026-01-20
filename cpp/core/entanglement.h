@@ -30,6 +30,12 @@ enum class LoopKind {
   kUnknown,
 };
 
+enum class AtomKind {
+  kSingle,
+  kP,
+  kC4,
+};
+
 struct Loop {
   int id = 0;
   LoopKind kind = LoopKind::kUnknown;
@@ -59,6 +65,10 @@ struct Surface {
 struct HitInfo {
   int loop_id = 0;
   int segment_id = 0;  // backbone segment index i for (i, i+1)
+  int res_a = 0;
+  int res_b = 0;
+  AtomKind atom_a = AtomKind::kSingle;
+  AtomKind atom_b = AtomKind::kSingle;
   Vec3 point;
 };
 
@@ -75,6 +85,13 @@ struct SurfaceBuildOptions {
 
 struct EvaluateOptions {
   int atom_index = 0;
+  int atom_index_p = 0;
+  int atom_index_c4 = 1;
+  enum class PolylineMode {
+    kSingleAtom,
+    kPC4Alternating,
+  };
+  PolylineMode polyline_mode = PolylineMode::kSingleAtom;
   double eps_plane = 1e-2;
   double eps_polygon = 1e-2;
   double eps_triangle = 1e-8;
