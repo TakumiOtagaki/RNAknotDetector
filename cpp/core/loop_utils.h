@@ -127,6 +127,9 @@ inline std::vector<int> BuildSkipResidues(const Loop &loop) {
   if (loop.closing_pairs.empty()) {
     return skip;
   }
+  auto add_index = [&](int idx) {
+    skip.push_back(idx);
+  };
   if (loop.kind == LoopKind::kHairpin) {
     auto [i, j] = SortedPair(loop.closing_pairs[0]);
     for (int k = i; k <= j; ++k) {
@@ -150,6 +153,10 @@ inline std::vector<int> BuildSkipResidues(const Loop &loop) {
     for (int idx = l; idx <= j; ++idx) {
       skip.push_back(idx);
     }
+    add_index(i - 1);
+    add_index(j + 1);
+    add_index(k + 1);
+    add_index(l - 1);
     return skip;
   }
   if (loop.kind == LoopKind::kMulti) {
@@ -189,6 +196,15 @@ inline std::vector<int> BuildSkipResidues(const Loop &loop) {
       if (skip_mask[idx]) {
         skip.push_back(idx);
       }
+    }
+    add_index(outer_i - 1);
+    add_index(outer_j + 1);
+    for (const auto &pair : pairs) {
+      if (pair.first == outer_i && pair.second == outer_j) {
+        continue;
+      }
+      add_index(pair.first + 1);
+      add_index(pair.second - 1);
     }
     return skip;
   }
