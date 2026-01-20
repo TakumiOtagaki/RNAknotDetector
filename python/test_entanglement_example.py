@@ -117,6 +117,8 @@ def main() -> int:
             continue
         p = hit.point
         loop_type = str(loop.kind)
+        if loop.kind == core.LoopKind.INTERNAL and not loop.boundary_residues:
+            loop_type = "LoopKind.STACKING"
         closing_pairs = [(bp.i, bp.j) for bp in loop.closing_pairs]
         i = hit.res_a
         j = hit.res_b
