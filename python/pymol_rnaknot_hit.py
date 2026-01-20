@@ -28,6 +28,7 @@ def rnaknot_hit(
     chain: str = "A",
     surface_mode: int = 1,
     polyline_mode: int = 1,
+    multi_chunk: int = 12,
     main_layer_only: bool = True,
     eps_plane: float = 1e-2,
     eps_polygon: float = 1e-2,
@@ -54,6 +55,7 @@ def rnaknot_hit(
         loops,
         eps_collinear=eps_collinear,
         surface_mode=surface_mode,
+        multi_chunk=multi_chunk,
     )
     result = core.evaluate_entanglement(
         coords_cpp,

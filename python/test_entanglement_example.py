@@ -58,6 +58,12 @@ def main() -> int:
         help="Surface mode: 0=best-fit plane, 1=triangle planes.",
     )
     parser.add_argument(
+        "--multi-chunk",
+        type=int,
+        default=12,
+        help="Chunk size factor for multiloop boundary splitting.",
+    )
+    parser.add_argument(
         "--polyline-mode",
         type=int,
         default=1,
@@ -96,6 +102,7 @@ def main() -> int:
         loops,
         eps_collinear=args.eps_collinear,
         surface_mode=args.surface_mode,
+        multi_chunk=args.multi_chunk,
     )
     valid_surfaces = sum(1 for s in surfaces if s.plane.valid and s.polygon.valid)
     print(f"[debug] surfaces built = {len(surfaces)} valid = {valid_surfaces}")

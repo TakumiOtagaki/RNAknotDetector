@@ -159,11 +159,13 @@ PYBIND11_MODULE(rnaknotdetector_core, m) {
          const std::vector<rna::Loop> &loops,
          int atom_index,
          double eps_collinear,
-         int surface_mode) {
+         int surface_mode,
+         int multi_chunk) {
         rna::SurfaceBuildOptions options;
         options.atom_index = atom_index;
         options.eps_collinear = eps_collinear;
         options.surface_mode = static_cast<rna::SurfaceMode>(surface_mode);
+        options.multi_chunk = multi_chunk;
         return rna::BuildSurfaces(coords, loops, options);
       },
       py::arg("coords"),
@@ -171,6 +173,7 @@ PYBIND11_MODULE(rnaknotdetector_core, m) {
       py::arg("atom_index") = 0,
       py::arg("eps_collinear") = 1e-6,
       py::arg("surface_mode") = static_cast<int>(rna::SurfaceMode::kTrianglePlanes),
+      py::arg("multi_chunk") = 12,
       "Build surfaces from loops and coordinates.");
 
   m.def(

@@ -218,6 +218,56 @@ std::vector<int> BuildBoundaryIndices(const Loop &loop, int n_res) {
   return boundary_indices;
 }
 
+std::vector<int> BuildOrderedBoundaryIndices(const Loop &loop, int n_res) {
+  std::vector<int> boundary_indices;
+  boundary_indices.reserve(loop.boundary_residues.size() +
+                           loop.closing_pairs.size() * 2);
+  std::vector<char> seen(n_res + 1, 0);
+  auto add_index = [&](int res_index) {
+    if (res_index <= 0 || res_index > n_res) {
+      return;
+    }
+    if (seen[res_index]) {
+      return;
+    }
+    seen[res_index] = 1;
+    boundary_indices.push_back(res_index);
+  };
+  for (int res_index : loop.boundary_residues) {
+    add_index(res_index);
+  }
+  for (const auto &pair : loop.closing_pairs) {
+    add_index(pair.i);
+    add_index(pair.j);
+  }
+  std::sort(boundary_indices.begin(), boundary_indices.end());
+  return boundary_indices;
+}
+
+std::vector<std::vector<int>> SplitBoundaryIndices(const std::vector<int> &indices,
+                                                   int multi_chunk) {
+  std::vector<std::vector<int>> groups;
+  if (indices.empty()) {
+    return groups;
+  }
+  if (multi_chunk <= 0) {
+    groups.push_back(indices);
+    return groups;
+  }
+  int n = static_cast<int>(indices.size());
+  int m = std::max(1, n / multi_chunk);
+  if (m <= 1) {
+    groups.push_back(indices);
+    return groups;
+  }
+  int chunk_size = (n + m - 1) / m;
+  for (int start = 0; start < n; start += chunk_size) {
+    int end = std::min(start + chunk_size, n);
+    groups.emplace_back(indices.begin() + start, indices.begin() + end);
+  }
+  return groups;
+}
+
 }  // namespace
 
 std::vector<Surface> BuildSurfaces(const std::vector<ResidueCoord> &coords,
@@ -227,61 +277,69 @@ std::vector<Surface> BuildSurfaces(const std::vector<ResidueCoord> &coords,
   std::vector<Surface> surfaces;
   surfaces.reserve(loops.size());
   for (const auto &loop : loops) {
-    Surface surface;
-    surface.loop_id = loop.id;
-    surface.kind = loop.kind;
-    surface.closing_pairs = loop.closing_pairs;
-    surface.skip_residues = BuildSkipResidues(loop);
-
-    std::vector<int> boundary_indices = BuildBoundaryIndices(loop, map.n_res);
-
-    std::vector<Vec3> boundary_points;
-    boundary_points.reserve(boundary_indices.size());
-    for (int res_index : boundary_indices) {
-      if (!map.has_coord[res_index]) {
-        continue;
-      }
-      boundary_points.push_back(map.coords[res_index]);
-    }
-    if (options.surface_mode == SurfaceMode::kBestFitPlane) {
-      surface.plane = FitPlane(boundary_points, options.eps_collinear);
-      surface.polygon = ProjectPolygon(boundary_points, surface.plane);
+    std::vector<std::vector<int>> boundary_groups;
+    if (loop.kind == LoopKind::kMulti) {
+      std::vector<int> ordered = BuildOrderedBoundaryIndices(loop, map.n_res);
+      boundary_groups = SplitBoundaryIndices(ordered, options.multi_chunk);
     } else {
-      surface.plane = FitPlane(boundary_points, options.eps_collinear);
-      surface.polygon.valid = false;
-      surface.polygon.vertices.clear();
-      if (surface.plane.valid && boundary_points.size() >= 3) {
-        std::vector<Vec2> poly2d;
-        std::vector<Vec3> poly3d;
-        poly2d.reserve(boundary_points.size());
-        poly3d.reserve(boundary_points.size());
-        for (const auto &p : boundary_points) {
-          Vec3 d = Sub(p, surface.plane.c);
-          double x = Dot(d, surface.plane.e1);
-          double y = Dot(d, surface.plane.e2);
-          Vec3 proj = Add(surface.plane.c,
-                          Add(Scale(surface.plane.e1, x),
-                              Scale(surface.plane.e2, y)));
-          poly2d.push_back(Vec2{x, y});
-          poly3d.push_back(proj);
+      boundary_groups.push_back(BuildBoundaryIndices(loop, map.n_res));
+    }
+
+    for (const auto &boundary_indices : boundary_groups) {
+      Surface surface;
+      surface.loop_id = loop.id;
+      surface.kind = loop.kind;
+      surface.closing_pairs = loop.closing_pairs;
+      surface.skip_residues = BuildSkipResidues(loop);
+
+      std::vector<Vec3> boundary_points;
+      boundary_points.reserve(boundary_indices.size());
+      for (int res_index : boundary_indices) {
+        if (!map.has_coord[res_index]) {
+          continue;
         }
-        surface.polygon.vertices = poly2d;
-        surface.polygon.valid = surface.polygon.vertices.size() >= 3;
-        std::vector<std::array<int, 3>> tris =
-            EarClipTriangulate(poly2d, 1e-12);
-        for (const auto &tri : tris) {
-          Triangle t{poly3d[tri[0]], poly3d[tri[1]], poly3d[tri[2]]};
-          Vec3 ab = Sub(t.b, t.a);
-          Vec3 ac = Sub(t.c, t.a);
-          double area = Norm(Cross(ab, ac));
-          if (area <= options.eps_collinear) {
-            continue;
+        boundary_points.push_back(map.coords[res_index]);
+      }
+      if (options.surface_mode == SurfaceMode::kBestFitPlane) {
+        surface.plane = FitPlane(boundary_points, options.eps_collinear);
+        surface.polygon = ProjectPolygon(boundary_points, surface.plane);
+      } else {
+        surface.plane = FitPlane(boundary_points, options.eps_collinear);
+        surface.polygon.valid = false;
+        surface.polygon.vertices.clear();
+        if (surface.plane.valid && boundary_points.size() >= 3) {
+          std::vector<Vec2> poly2d;
+          std::vector<Vec3> poly3d;
+          poly2d.reserve(boundary_points.size());
+          poly3d.reserve(boundary_points.size());
+          for (const auto &p : boundary_points) {
+            Vec3 d = Sub(p, surface.plane.c);
+            double x = Dot(d, surface.plane.e1);
+            double y = Dot(d, surface.plane.e2);
+            Vec3 proj = Add(surface.plane.c,
+                            Add(Scale(surface.plane.e1, x),
+                                Scale(surface.plane.e2, y)));
+            poly2d.push_back(Vec2{x, y});
+            poly3d.push_back(proj);
           }
-          surface.triangles.push_back(t);
+          surface.polygon.vertices = poly2d;
+          surface.polygon.valid = surface.polygon.vertices.size() >= 3;
+          std::vector<std::array<int, 3>> tris =
+              EarClipTriangulate(poly2d, 1e-12);
+          for (const auto &tri : tris) {
+            Triangle t{poly3d[tri[0]], poly3d[tri[1]], poly3d[tri[2]]};
+            Vec3 ab = Sub(t.b, t.a);
+            Vec3 ac = Sub(t.c, t.a);
+            double area = Norm(Cross(ab, ac));
+            if (area <= options.eps_collinear) {
+              continue;
+            }
+            surface.triangles.push_back(t);
+          }
         }
       }
+      surfaces.push_back(std::move(surface));
     }
-    surfaces.push_back(std::move(surface));
   }
   return surfaces;
 }

@@ -81,6 +81,7 @@ struct SurfaceBuildOptions {
   int atom_index = 0;         // which atom in ResidueCoord::atoms to use
   double eps_collinear = 1e-6;  // ratio threshold for near-collinearity
   SurfaceMode surface_mode = SurfaceMode::kTrianglePlanes;
+  int multi_chunk = 12;       // chunk size factor for multiloop boundary splitting
 };
 
 struct EvaluateOptions {
