@@ -133,17 +133,40 @@ inline std::vector<int> BuildSkipResidues(const Loop &loop) {
     return skip;
   }
   if (loop.kind == LoopKind::kMulti) {
-    int min_res = std::numeric_limits<int>::max();
-    int max_res = std::numeric_limits<int>::min();
+    if (loop.closing_pairs.empty()) {
+      return skip;
+    }
+    int outer_i = std::numeric_limits<int>::max();
+    int outer_j = std::numeric_limits<int>::min();
+    std::vector<std::pair<int, int>> pairs;
+    pairs.reserve(loop.closing_pairs.size());
     for (const auto &pair : loop.closing_pairs) {
       auto [i, j] = SortedPair(pair);
-      min_res = std::min(min_res, i);
-      max_res = std::max(max_res, j);
-      skip.push_back(i);
-      skip.push_back(j);
+      pairs.emplace_back(i, j);
+      outer_i = std::min(outer_i, i);
+      outer_j = std::max(outer_j, j);
     }
-    if (min_res <= max_res) {
-      for (int idx = min_res; idx <= max_res; ++idx) {
+    if (outer_i > outer_j) {
+      return skip;
+    }
+    std::vector<char> skip_mask(outer_j + 1, 0);
+    for (int idx = outer_i; idx <= outer_j; ++idx) {
+      skip_mask[idx] = 1;
+    }
+    for (const auto &pair : pairs) {
+      int i = pair.first;
+      int j = pair.second;
+      if (i == outer_i && j == outer_j) {
+        continue;
+      }
+      for (int idx = i + 1; idx <= j - 1; ++idx) {
+        skip_mask[idx] = 0;
+      }
+      skip_mask[i] = 1;
+      skip_mask[j] = 1;
+    }
+    for (int idx = outer_i; idx <= outer_j; ++idx) {
+      if (skip_mask[idx]) {
         skip.push_back(idx);
       }
     }

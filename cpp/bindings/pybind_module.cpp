@@ -197,17 +197,3 @@ PYBIND11_MODULE(rnaknotdetector_core, m) {
       py::arg("eps_polygon") = 1e-2,
       "Evaluate entanglement for surfaces.");
 }
-
-
-Loop 1 (2D: 64-69, 97-98, 105-120); IP1> A: A149, C4' - A: G150, P
-Loop 2 (2D: 47-48, 142-154, 165-168); IP2> A: C113, P - A: C113, C4'
-
-
-Dinucleotide step 1 (2D: 43-44, 171-172); IP3> A: U154, P - A: U154, C4'
-Loop 2 (2D: 47-48, 142-154, 165-168); IP4> A: G44, B - A: C171, C4'
-
-Loop 2 (2D: 47-48, 142-154, 165-168); IP5> A: G45, B - A: C170, C4'
-Dinucleotide step 2 (2D: 44-45, 170-171); IP6> A: C171, C4' - A: G44, B
-
-Loop 2 (2D: 47-48, 142-154, 165-168); IP7> A: G46, B - A: U169, C4'
-Dinucleotide step 3 (2D: 45-46, 169-170); IP8> A: C170, C4' - A: G45, B
