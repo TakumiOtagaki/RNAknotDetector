@@ -40,6 +40,31 @@ bool IsTargetMultiloop_debug(const std::vector<BasePair> &pairs) {
          sorted[2] == std::make_pair(98, 105);
 }
 
+std::vector<Segment> BuildSegments(const CoordMap &map) {
+  std::vector<Segment> segments;
+  if (map.n_res <= 1) {
+    return segments;
+  }
+  segments.reserve(map.n_res);
+  for (int i = 1; i < map.n_res; ++i) {
+    if (!map.has_coord[i] || !map.has_coord[i + 1]) {
+      continue;
+    }
+    segments.push_back(Segment{i, map.coords[i], map.coords[i + 1]});
+  }
+  return segments;
+}
+
+std::vector<char> BuildSkipMask(const Surface &surface, int n_res) {
+  std::vector<char> skip_mask(n_res + 1, 0);
+  for (int idx : surface.skip_residues) {
+    if (idx > 0 && idx <= n_res) {
+      skip_mask[idx] = 1;
+    }
+  }
+  return skip_mask;
+}
+
 }  // namespace
 
 
@@ -92,16 +117,9 @@ Result EvaluateEntanglement(const std::vector<ResidueCoord> &coords,
                             const EvaluateOptions &options) {
   Result result;
   CoordMap map = BuildCoordMap(coords, options.atom_index);
-  if (map.n_res <= 1) {
+  std::vector<Segment> segments = BuildSegments(map);
+  if (segments.empty()) {
     return result;
-  }
-  std::vector<Segment> segments;
-  segments.reserve(map.n_res);
-  for (int i = 1; i < map.n_res; ++i) {
-    if (!map.has_coord[i] || !map.has_coord[i + 1]) {
-      continue;
-    }
-    segments.push_back(Segment{i, map.coords[i], map.coords[i + 1]});
   }
   const std::unordered_set<int> debug_segments = {46, 89, 143};
 
@@ -110,15 +128,7 @@ Result EvaluateEntanglement(const std::vector<ResidueCoord> &coords,
     bool watch_target_multiloop =
         (surface.kind == LoopKind::kMulti &&
          IsTargetMultiloop_debug(surface.closing_pairs));
-    std::vector<char> skip_mask(map.n_res + 1, 0);
-    for (int idx : surface.skip_residues) {
-      if (idx > 0 && idx <= map.n_res) {
-        skip_mask[idx] = 1;
-      }
-    }
-    int candidate_segments = 0;
-    int plane_hits = 0;
-    int triangle_hits = 0;
+    std::vector<char> skip_mask = BuildSkipMask(surface, map.n_res);
     bool use_triangles = !surface.triangles.empty();
     if (!use_triangles && (!surface.plane.valid || !surface.polygon.valid)) {
       continue;
@@ -167,7 +177,6 @@ Result EvaluateEntanglement(const std::vector<ResidueCoord> &coords,
                     << tri.c.y << "," << tri.c.z << ")\n";
         }
       }
-      candidate_segments++;
       Vec3 intersection;
       bool hit = false;
       if (use_triangles) {
@@ -177,7 +186,6 @@ Result EvaluateEntanglement(const std::vector<ResidueCoord> &coords,
           if (SegmentIntersectsTriangle(segment.a, segment.b, tri,
                                         options.eps_triangle, &intersection)) {
             hit = true;
-            triangle_hits++;
             break;
           }
         }
@@ -208,15 +216,14 @@ Result EvaluateEntanglement(const std::vector<ResidueCoord> &coords,
                     << " point=(" << intersection.x << "," << intersection.y << ","
                     << intersection.z << ")\n";
         }
-        plane_hits++;
         Vec3 d = Sub(intersection, surface.plane.c);
         Vec2 q{Dot(d, surface.plane.e1), Dot(d, surface.plane.e2)};
         bool in_poly = PointInPolygon2D(q, surface.polygon, options.eps_polygon);
-      if (watch_target_multiloop && i == 46) {
-        std::cerr << "[debug] target_multiloop loop=" << surface.loop_id
-                  << " segment=46 in_polygon=" << in_poly
-                  << " q=(" << q.x << "," << q.y << ")\n";
-      }
+        if (watch_target_multiloop && i == 46) {
+          std::cerr << "[debug] target_multiloop loop=" << surface.loop_id
+                    << " segment=46 in_polygon=" << in_poly
+                    << " q=(" << q.x << "," << q.y << ")\n";
+        }
         if (watch_segment) {
           double min_x = 0.0;
           double min_y = 0.0;
@@ -258,9 +265,6 @@ Result EvaluateEntanglement(const std::vector<ResidueCoord> &coords,
         result.hits.push_back(HitInfo{surface.loop_id, segment.id, intersection});
       }
     }
-    (void)candidate_segments;
-    (void)plane_hits;
-    (void)triangle_hits;
   }
   result.K = static_cast<int>(result.hits.size());
   return result;

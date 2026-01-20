@@ -13,6 +13,44 @@
 namespace rna {
 namespace {
 
+struct OrderedPoint {
+  Vec3 p;
+  Vec2 q;
+  double angle;
+};
+
+std::vector<OrderedPoint> OrderPointsByAngle(const std::vector<Vec3> &points,
+                                             const Plane &plane) {
+  std::vector<OrderedPoint> ordered;
+  if (!plane.valid || points.size() < 3) {
+    return ordered;
+  }
+  ordered.reserve(points.size());
+  Vec2 center{0.0, 0.0};
+  for (const auto &p : points) {
+    Vec3 d = Sub(p, plane.c);
+    double x = Dot(d, plane.e1);
+    double y = Dot(d, plane.e2);
+    center.x += x;
+    center.y += y;
+  }
+  center.x /= static_cast<double>(points.size());
+  center.y /= static_cast<double>(points.size());
+  for (const auto &p : points) {
+    Vec3 d = Sub(p, plane.c);
+    double x = Dot(d, plane.e1);
+    double y = Dot(d, plane.e2);
+    Vec3 proj = Add(plane.c, Add(Scale(plane.e1, x), Scale(plane.e2, y)));
+    double angle = std::atan2(y - center.y, x - center.x);
+    ordered.push_back(OrderedPoint{proj, Vec2{x, y}, angle});
+  }
+  std::sort(ordered.begin(), ordered.end(),
+            [](const OrderedPoint &a, const OrderedPoint &b) {
+              return a.angle < b.angle;
+            });
+  return ordered;
+}
+
 std::vector<int> BuildBoundaryIndices(const Loop &loop, int n_res) {
   std::vector<int> boundary_indices;
   boundary_indices.reserve(loop.boundary_residues.size() +
@@ -148,37 +186,8 @@ std::vector<Surface> BuildSurfaces(const std::vector<ResidueCoord> &coords,
       surface.polygon.valid = false;
       surface.polygon.vertices.clear();
       if (surface.plane.valid && boundary_points.size() >= 3) {
-        struct OrderedPoint {
-          Vec3 p;
-          Vec2 q;
-          double angle;
-        };
-        std::vector<OrderedPoint> ordered;
-        ordered.reserve(boundary_points.size());
-        Vec2 center{0.0, 0.0};
-        for (const auto &p : boundary_points) {
-          Vec3 d = Sub(p, surface.plane.c);
-          double x = Dot(d, surface.plane.e1);
-          double y = Dot(d, surface.plane.e2);
-          center.x += x;
-          center.y += y;
-        }
-        center.x /= static_cast<double>(boundary_points.size());
-        center.y /= static_cast<double>(boundary_points.size());
-        for (const auto &p : boundary_points) {
-          Vec3 d = Sub(p, surface.plane.c);
-          double x = Dot(d, surface.plane.e1);
-          double y = Dot(d, surface.plane.e2);
-          Vec3 proj = Add(surface.plane.c,
-                          Add(Scale(surface.plane.e1, x),
-                              Scale(surface.plane.e2, y)));
-          double angle = std::atan2(y - center.y, x - center.x);
-          ordered.push_back(OrderedPoint{proj, Vec2{x, y}, angle});
-        }
-        std::sort(ordered.begin(), ordered.end(),
-                  [](const OrderedPoint &a, const OrderedPoint &b) {
-                    return a.angle < b.angle;
-                  });
+        std::vector<OrderedPoint> ordered =
+            OrderPointsByAngle(boundary_points, surface.plane);
         surface.polygon.vertices.clear();
         surface.polygon.vertices.reserve(ordered.size());
         for (const auto &point : ordered) {
