@@ -3,6 +3,9 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass
 from pathlib import Path
+import os
+import sys
+import tempfile
 from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 
 from pymol import cmd
@@ -24,7 +27,7 @@ class ResidueKey:
 
 def rnaknot_hit(
     model_name: str,
-    ss_path: str,
+    ss_path: Optional[str] = None,
     chain: str = "A",
     surface_mode: int = 1,
     polyline_mode: int = 1,
@@ -45,7 +48,10 @@ def rnaknot_hit(
     if not coords_cpp:
         raise RuntimeError("No residues found for the requested model/chain")
 
-    bp_list = _load_base_pairs(ss_path)
+    if ss_path:
+        bp_list = _load_base_pairs(ss_path)
+    else:
+        bp_list = _load_base_pairs_from_rna_tools(cmd_handle, model_name, chain)
     if main_layer_only or not bp_list:
         bp_list = core.get_main_layer_pairs(bp_list)
 
@@ -114,6 +120,56 @@ def _load_base_pairs(ss_path: str) -> List[Tuple[int, int]]:
         pairs = parse_bpseq(lines)
         return [(bp.i, bp.j) for bp in pairs]
     raise ValueError(f"Unsupported ss_path extension: {path.suffix}")
+
+
+def _load_base_pairs_from_rna_tools(
+    cmd_handle,
+    model_name: str,
+    chain: str,
+) -> List[Tuple[int, int]]:
+    _ensure_rna_tools_path()
+    try:
+        from rna_tools.tools.rna_x3dna.rna_x3dna import x3DNA
+        from rna_tools import rna_tools_config as rtc
+    except Exception as exc:
+        raise RuntimeError("rna-tools is not available on sys.path") from exc
+
+    dssr_path = _resolve_dssr_path(rtc)
+    rtc.X3DNA = dssr_path
+
+    selection = f"{model_name} and chain {chain}"
+    with tempfile.NamedTemporaryFile(suffix=".pdb", delete=False) as handle:
+        tmp_path = handle.name
+    cmd_handle.save(tmp_path, selection)
+    try:
+        ss = x3DNA(tmp_path).get_secstruc()
+    finally:
+        try:
+            os.remove(tmp_path)
+        except OSError:
+            pass
+    if not ss:
+        raise RuntimeError("Failed to obtain secondary structure from DSSR")
+    pair_map = parse_secstruct(ss)
+    return [(i, j) for i, j in enumerate(pair_map) if i > 0 and j > i]
+
+
+def _resolve_dssr_path(rtc) -> str:
+    dssr_candidate = rtc.X3DNA if getattr(rtc, "X3DNA", None) else ""
+    if dssr_candidate and os.path.isfile(dssr_candidate):
+        return dssr_candidate
+    repo_root = Path(__file__).resolve().parents[1]
+    dssr_path = repo_root / "apps" / "x3dna-dssr"
+    if dssr_path.is_file():
+        return str(dssr_path)
+    raise RuntimeError("DSSR binary not found (set rna_tools_config.X3DNA)")
+
+
+def _ensure_rna_tools_path() -> None:
+    repo_root = Path(__file__).resolve().parents[1]
+    rna_tools_root = repo_root / "rna-tools"
+    if rna_tools_root.is_dir() and str(rna_tools_root) not in sys.path:
+        sys.path.insert(0, str(rna_tools_root))
 
 
 def _extract_coords_from_pymol(
