@@ -98,7 +98,27 @@ inline LoopKind ClassifyLoop(const std::vector<int> &pair_map,
     return LoopKind::kInternal;
   }
 
-  *boundary = CollectUnpaired(pair_map, i + 1, j - 1);
+  std::vector<std::pair<int, int>> sorted_pairs;
+  sorted_pairs.reserve(child_pairs.size());
+  for (const auto &pair : child_pairs) {
+    sorted_pairs.push_back(SortedPair(pair));
+  }
+  std::sort(sorted_pairs.begin(), sorted_pairs.end());
+  boundary->clear();
+  int current = i;
+  for (const auto &pair : sorted_pairs) {
+    int left = pair.first;
+    int right = pair.second;
+    if (current + 1 <= left - 1) {
+      auto gap = CollectUnpaired(pair_map, current + 1, left - 1);
+      boundary->insert(boundary->end(), gap.begin(), gap.end());
+    }
+    current = right;
+  }
+  if (current + 1 <= j - 1) {
+    auto gap = CollectUnpaired(pair_map, current + 1, j - 1);
+    boundary->insert(boundary->end(), gap.begin(), gap.end());
+  }
   return LoopKind::kMulti;
 }
 

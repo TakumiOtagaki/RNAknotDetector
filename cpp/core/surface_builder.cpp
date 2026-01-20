@@ -68,46 +68,12 @@ std::vector<int> BuildBoundaryIndices(const Loop &loop, int n_res) {
   };
 
   if (loop.kind == LoopKind::kMulti) {
-    std::vector<std::pair<int, int>> pairs;
-    pairs.reserve(loop.closing_pairs.size());
+    for (int res_index : loop.boundary_residues) {
+      add_index(res_index);
+    }
     for (const auto &pair : loop.closing_pairs) {
-      pairs.push_back(SortedPair(pair));
-    }
-    std::sort(pairs.begin(), pairs.end());
-    if (!pairs.empty()) {
-      int l = pairs.front().first;
-      int i_branch = 0;
-      int j_branch = 0;
-      for (const auto &pair : pairs) {
-        if (pair.first > l) {
-          i_branch = pair.first;
-          j_branch = pair.second;
-          break;
-        }
-      }
-      if (i_branch > 0) {
-        for (int idx = l; idx <= i_branch - 1; ++idx) {
-          add_index(idx);
-        }
-        add_index(i_branch);
-        add_index(j_branch);
-      } else {
-        add_index(l);
-        add_index(pairs.front().second);
-      }
-    }
-    if (loop.closing_pairs.size() == 3) {
-      std::vector<std::pair<int, int>> check = pairs;
-      if (check.size() == 3 &&
-          check[0] == std::make_pair(63, 121) &&
-          check[1] == std::make_pair(70, 96) &&
-          check[2] == std::make_pair(98, 105)) {
-        std::cerr << "[debug] target_multiloop boundary_indices:";
-        for (int idx : boundary_indices) {
-          std::cerr << " " << idx;
-        }
-        std::cerr << "\n";
-      }
+      add_index(pair.i);
+      add_index(pair.j);
     }
     return boundary_indices;
   }
