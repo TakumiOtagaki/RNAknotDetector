@@ -91,7 +91,7 @@ def rnaknot_hit(
             f"hit loop={hit.loop_id} type={loop_type} "
             f"pairs={closing_pairs} segment=({a_label},{b_label})"
         )
-        selection_name = f"hit_{idx}"
+        selection_name = f"{model_name}_hit_{idx}"
         selection = _build_hit_selection(loop, hit, res_id_map, chain)
         cmd_handle.select(selection_name, f"({model_name} and {selection})")
         tri_count = len(surface.triangles) if surface.triangles is not None else 0
@@ -148,10 +148,12 @@ def _load_base_pairs_from_rna_tools(
             os.remove(tmp_path)
         except OSError:
             pass
+    ss = _extract_secstruct_from_dssr(ss)
     if not ss:
         raise RuntimeError("Failed to obtain secondary structure from DSSR")
-    pair_map = parse_secstruct(ss)
-    return [(i, j) for i, j in enumerate(pair_map) if i > 0 and j > i]
+    ss = _normalize_dssr_secstruct(ss)
+    pairs = _parse_extended_secstruct(ss)
+    return pairs
 
 
 def _resolve_dssr_path(rtc) -> str:
@@ -159,9 +161,19 @@ def _resolve_dssr_path(rtc) -> str:
     if dssr_candidate and os.path.isfile(dssr_candidate):
         return dssr_candidate
     repo_root = Path(__file__).resolve().parents[1]
+    wrapper_path = repo_root / "apps" / "x3dna-dssr-wrapper"
+    if wrapper_path.is_file():
+        return str(wrapper_path)
     dssr_path = repo_root / "apps" / "x3dna-dssr"
     if dssr_path.is_file():
         return str(dssr_path)
+    cwd_path = Path.cwd() / "apps" / "x3dna-dssr"
+    if cwd_path.is_file():
+        return str(cwd_path)
+    for path_dir in os.environ.get("PATH", "").split(os.pathsep):
+        candidate = Path(path_dir) / "x3dna-dssr"
+        if candidate.is_file():
+            return str(candidate)
     raise RuntimeError("DSSR binary not found (set rna_tools_config.X3DNA)")
 
 
@@ -170,6 +182,57 @@ def _ensure_rna_tools_path() -> None:
     rna_tools_root = repo_root / "rna-tools"
     if rna_tools_root.is_dir() and str(rna_tools_root) not in sys.path:
         sys.path.insert(0, str(rna_tools_root))
+
+
+def _extract_secstruct_from_dssr(raw: str) -> str:
+    lines = [line.strip() for line in raw.splitlines() if line.strip()]
+    if not lines:
+        return ""
+    # DSSR output may include header/sequence; choose the last line with bracket symbols.
+    for line in reversed(lines):
+        if any(ch in line for ch in "().[]{}<>"):
+            return line
+    return ""
+
+
+def _normalize_dssr_secstruct(ss: str) -> str:
+    # Keep standard and up to 3 pseudoknot layers, drop chain breaks.
+    ss = ss.replace("&", "")
+    allowed = set("().[]{}<>")
+    cleaned = []
+    for ch in ss:
+        cleaned.append(ch if ch in allowed else ".")
+    return "".join(cleaned)
+
+
+def _parse_extended_secstruct(ss: str) -> List[Tuple[int, int]]:
+    stacks = {
+        "(": [],
+        "[": [],
+        "{": [],
+        "<": [],
+    }
+    pairs: List[Tuple[int, int]] = []
+    closing_to_open = {")": "(", "]": "[", "}": "{", ">": "<"}
+    for idx, ch in enumerate(ss, start=1):
+        if ch in stacks:
+            stacks[ch].append(idx)
+            continue
+        if ch in closing_to_open:
+            open_ch = closing_to_open[ch]
+            if not stacks[open_ch]:
+                raise ValueError(f"Unbalanced secstruct: unexpected {ch} at {idx}")
+            i = stacks[open_ch].pop()
+            pairs.append((i, idx))
+            continue
+        if ch == ".":
+            continue
+        raise ValueError(f"Unsupported secstruct symbol: {ch}")
+    for open_ch, stack in stacks.items():
+        if stack:
+            raise ValueError(f"Unbalanced secstruct: missing close for {open_ch}")
+    pairs.sort()
+    return pairs
 
 
 def _extract_coords_from_pymol(

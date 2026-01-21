@@ -1,0 +1,2 @@
+#!/bin/sh
+exec arch -x86_64 "/Users/ootagakitakumi/RNAknotDetector/apps/x3dna-dssr" "$@"
