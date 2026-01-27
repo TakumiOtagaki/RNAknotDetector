@@ -51,6 +51,7 @@ def rnaknot_hit(
     if ss_path:
         bp_list = _load_base_pairs(ss_path)
     else:
+        print("[info] ss_path not provided; using DSSR via rna-tools")
         bp_list = _load_base_pairs_from_rna_tools(cmd_handle, model_name, chain)
     if main_layer_only or not bp_list:
         bp_list = core.get_main_layer_pairs(bp_list)
@@ -105,6 +106,8 @@ def rnaknot_hit(
             atom_map,
         )
 
+    if not hit_indices:
+        print("no hit")
     return hit_indices
 
 
@@ -143,6 +146,9 @@ def _load_base_pairs_from_rna_tools(
     cmd_handle.save(tmp_path, selection)
     try:
         ss = x3DNA(tmp_path).get_secstruc()
+        if ss:
+            print("[debug] DSSR secstruct raw:")
+            print(ss)
     finally:
         try:
             os.remove(tmp_path)
