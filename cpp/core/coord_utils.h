@@ -22,12 +22,32 @@ struct Segment {
   AtomKind atom_b = AtomKind::kSingle;
   Vec3 a;
   Vec3 b;
+
+  Segment() = default;
+  Segment(int id_in,
+          int res_a_in,
+          int res_b_in,
+          AtomKind atom_a_in,
+          AtomKind atom_b_in,
+          const Vec3 &a_in,
+          const Vec3 &b_in)
+      : id(id_in),
+        res_a(res_a_in),
+        res_b(res_b_in),
+        atom_a(atom_a_in),
+        atom_b(atom_b_in),
+        a(a_in),
+        b(b_in) {}
 };
 
 struct PolylinePoint {
   int res_index = 0;
   AtomKind atom_kind = AtomKind::kSingle;
   Vec3 point;
+
+  PolylinePoint() = default;
+  PolylinePoint(int res_index_in, AtomKind atom_kind_in, const Vec3 &point_in)
+      : res_index(res_index_in), atom_kind(atom_kind_in), point(point_in) {}
 };
 
 inline bool IsFiniteCoord(const Vec3 &v) {

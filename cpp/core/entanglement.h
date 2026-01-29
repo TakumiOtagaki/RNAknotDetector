@@ -21,6 +21,10 @@ struct BasePair {
     kNonCanonical,
   };
   Type bp_type = Type::kUnclassified;
+
+  BasePair() = default;
+  BasePair(int i_in, int j_in, Type type_in = Type::kUnclassified)
+      : i(i_in), j(j_in), bp_type(type_in) {}
 };
 
 enum class LoopKind {
@@ -70,6 +74,22 @@ struct HitInfo {
   AtomKind atom_a = AtomKind::kSingle;
   AtomKind atom_b = AtomKind::kSingle;
   Vec3 point;
+
+  HitInfo() = default;
+  HitInfo(int loop_id_in,
+          int segment_id_in,
+          int res_a_in,
+          int res_b_in,
+          AtomKind atom_a_in,
+          AtomKind atom_b_in,
+          const Vec3 &point_in)
+      : loop_id(loop_id_in),
+        segment_id(segment_id_in),
+        res_a(res_a_in),
+        res_b(res_b_in),
+        atom_a(atom_a_in),
+        atom_b(atom_b_in),
+        point(point_in) {}
 };
 
 struct Result {

@@ -160,7 +160,9 @@ std::vector<BasePair> ExtractMainLayerFromBasePairs(
     if (bp.i == bp.j) {
       throw std::invalid_argument("Base pair cannot be self-paired");
     }
-    auto [i, j] = SortedPair(bp);
+    std::pair<int, int> ij = SortedPair(bp);
+    int i = ij.first;
+    int j = ij.second;
     pairs.emplace_back(i, j);
     type_map.emplace(PairKey(i, j), bp.bp_type);
   }

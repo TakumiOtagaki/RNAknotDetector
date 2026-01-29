@@ -4,6 +4,7 @@
 #include <array>
 #include <cmath>
 #include <iostream>
+#include <utility>
 
 #include "coord_utils.h"
 #include "geometry2d.h"
@@ -118,38 +119,6 @@ std::vector<std::array<int, 3>> EarClipTriangulate(
   return tris;
 }
 
-std::vector<OrderedPoint> OrderPointsByAngle(const std::vector<Vec3> &points,
-                                             const Plane &plane) {
-  std::vector<OrderedPoint> ordered;
-  if (!plane.valid || points.size() < 3) {
-    return ordered;
-  }
-  ordered.reserve(points.size());
-  Vec2 center{0.0, 0.0};
-  for (const auto &p : points) {
-    Vec3 d = Sub(p, plane.c);
-    double x = Dot(d, plane.e1);
-    double y = Dot(d, plane.e2);
-    center.x += x;
-    center.y += y;
-  }
-  center.x /= static_cast<double>(points.size());
-  center.y /= static_cast<double>(points.size());
-  for (const auto &p : points) {
-    Vec3 d = Sub(p, plane.c);
-    double x = Dot(d, plane.e1);
-    double y = Dot(d, plane.e2);
-    Vec3 proj = Add(plane.c, Add(Scale(plane.e1, x), Scale(plane.e2, y)));
-    double angle = std::atan2(y - center.y, x - center.x);
-    ordered.push_back(OrderedPoint{proj, Vec2{x, y}, angle});
-  }
-  std::sort(ordered.begin(), ordered.end(),
-            [](const OrderedPoint &a, const OrderedPoint &b) {
-              return a.angle < b.angle;
-            });
-  return ordered;
-}
-
 std::vector<int> BuildBoundaryIndices(const Loop &loop, int n_res) {
   std::vector<int> boundary_indices;
   boundary_indices.reserve(loop.boundary_residues.size() +
@@ -191,12 +160,18 @@ std::vector<int> BuildBoundaryIndices(const Loop &loop, int n_res) {
       add_index(res_index);
     }
   } else if (loop.kind == LoopKind::kHairpin) {
-    auto [i, j] = SortedPair(loop.closing_pairs[0]);
+    std::pair<int, int> ij = SortedPair(loop.closing_pairs[0]);
+    int i = ij.first;
+    int j = ij.second;
     add_range(i, j);
   } else if (loop.kind == LoopKind::kInternal) {
-    auto [i, j] = SortedPair(loop.closing_pairs[0]);
+    std::pair<int, int> ij = SortedPair(loop.closing_pairs[0]);
+    int i = ij.first;
+    int j = ij.second;
     if (loop.closing_pairs.size() >= 2) {
-      auto [h, l] = SortedPair(loop.closing_pairs[1]);
+      std::pair<int, int> hl = SortedPair(loop.closing_pairs[1]);
+      int h = hl.first;
+      int l = hl.second;
       add_range(i, h - 1);
       add_index(h);
       add_index(l);

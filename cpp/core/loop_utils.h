@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <limits>
 #include <stdexcept>
+#include <utility>
 #include <vector>
 
 #include "entanglement.h"
@@ -19,7 +20,9 @@ inline std::vector<int> BuildPairMap(const std::vector<BasePair> &base_pairs, in
     if (bp.i == bp.j) {
       throw std::invalid_argument("Base pair cannot be self-paired");
     }
-    auto [i, j] = SortedPair(bp);
+    std::pair<int, int> ij = SortedPair(bp);
+    int i = ij.first;
+    int j = ij.second;
     if (pair_map[i] != 0 || pair_map[j] != 0) {
       throw std::invalid_argument("Residue paired multiple times");
     }
@@ -88,7 +91,9 @@ inline LoopKind ClassifyLoop(const std::vector<int> &pair_map,
     return LoopKind::kHairpin;
   }
   if (child_pairs.size() == 1) {
-    auto [k, l] = SortedPair(child_pairs[0]);
+    std::pair<int, int> kl = SortedPair(child_pairs[0]);
+    int k = kl.first;
+    int l = kl.second;
     auto left = CollectUnpaired(pair_map, i + 1, k - 1);
     auto right = CollectUnpaired(pair_map, l + 1, j - 1);
     boundary->clear();
@@ -131,7 +136,9 @@ inline std::vector<int> BuildSkipResidues(const Loop &loop) {
     skip.push_back(idx);
   };
   if (loop.kind == LoopKind::kHairpin) {
-    auto [i, j] = SortedPair(loop.closing_pairs[0]);
+    std::pair<int, int> ij = SortedPair(loop.closing_pairs[0]);
+    int i = ij.first;
+    int j = ij.second;
     for (int k = i; k <= j; ++k) {
       skip.push_back(k);
     }
@@ -139,14 +146,20 @@ inline std::vector<int> BuildSkipResidues(const Loop &loop) {
   }
   if (loop.kind == LoopKind::kInternal) {
     if (loop.closing_pairs.size() < 2) {
-      auto [i, j] = SortedPair(loop.closing_pairs[0]);
+      std::pair<int, int> ij = SortedPair(loop.closing_pairs[0]);
+      int i = ij.first;
+      int j = ij.second;
       for (int k = i; k <= j; ++k) {
         skip.push_back(k);
       }
       return skip;
     }
-    auto [i, j] = SortedPair(loop.closing_pairs[0]);
-    auto [k, l] = SortedPair(loop.closing_pairs[1]);
+    std::pair<int, int> ij = SortedPair(loop.closing_pairs[0]);
+    std::pair<int, int> kl = SortedPair(loop.closing_pairs[1]);
+    int i = ij.first;
+    int j = ij.second;
+    int k = kl.first;
+    int l = kl.second;
     for (int idx = i; idx <= k; ++idx) {
       skip.push_back(idx);
     }
@@ -168,7 +181,9 @@ inline std::vector<int> BuildSkipResidues(const Loop &loop) {
     std::vector<std::pair<int, int>> pairs;
     pairs.reserve(loop.closing_pairs.size());
     for (const auto &pair : loop.closing_pairs) {
-      auto [i, j] = SortedPair(pair);
+      std::pair<int, int> ij = SortedPair(pair);
+      int i = ij.first;
+      int j = ij.second;
       pairs.emplace_back(i, j);
       outer_i = std::min(outer_i, i);
       outer_j = std::max(outer_j, j);
