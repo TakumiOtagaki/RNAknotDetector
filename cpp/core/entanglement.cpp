@@ -6,8 +6,10 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <cstdlib>
 #include <iostream>
 #include <stdexcept>
+#include <string>
 #include <unordered_set>
 
 namespace rna {
@@ -23,6 +25,11 @@ namespace {
 // もし loop_id や segment_id が 32bit を超えることがあるなら衝突するので、その場合は別のキー形式に変える必要があります。
 int64_t HitKey(int loop_id, int segment_id) {
   return (static_cast<int64_t>(loop_id) << 32) | static_cast<uint32_t>(segment_id);
+}
+
+bool DebugEnabled() {
+  const char *v = std::getenv("RNAKNOT_VERBOSE");
+  return v != nullptr && v[0] != '\0' && std::string(v) != "0";
 }
 
 bool IsTargetMultiloop_debug(const std::vector<BasePair> &pairs) {
@@ -54,12 +61,6 @@ std::vector<Segment> BuildSegments(const CoordMap &map) {
         Segment{i, i, i + 1, AtomKind::kSingle, AtomKind::kSingle, map.coords[i], map.coords[i + 1]});
   }
   return segments;
-}
-
-std::vector<Segment> BuildSegmentsSingleAtom(const std::vector<ResidueCoord> &coords,
-                                             int atom_index) {
-  CoordMap map = BuildCoordMap(coords, atom_index);
-  return BuildSegments(map);
 }
 
 std::vector<Segment> BuildSegmentsPC4(const std::vector<ResidueCoord> &coords,
@@ -131,6 +132,7 @@ Result EvaluateEntanglement(const std::vector<ResidueCoord> &coords,
                             const std::vector<Surface> &surfaces,
                             const EvaluateOptions &options) {
   Result result;
+  const bool debug = DebugEnabled();
   CoordMap map = BuildCoordMap(coords, options.atom_index);
   std::vector<Segment> segments;
   if (options.polyline_mode == EvaluateOptions::PolylineMode::kPC4Alternating) {
@@ -146,8 +148,8 @@ Result EvaluateEntanglement(const std::vector<ResidueCoord> &coords,
   std::unordered_set<int64_t> hit_keys;
   for (const auto &surface : surfaces) {
     bool watch_target_multiloop =
-        (surface.kind == LoopKind::kMulti &&
-         IsTargetMultiloop_debug(surface.closing_pairs));
+        debug && (surface.kind == LoopKind::kMulti &&
+                  IsTargetMultiloop_debug(surface.closing_pairs));
     std::vector<char> skip_mask = BuildSkipMask(surface, map.n_res);
     bool use_triangles = !surface.triangles.empty();
     if (!use_triangles && (!surface.plane.valid || !surface.polygon.valid)) {
@@ -161,8 +163,11 @@ Result EvaluateEntanglement(const std::vector<ResidueCoord> &coords,
       int segment_index = segment.id;
       int res_a = segment.res_a;
       int res_b = segment.res_b;
-      bool watch_segment = debug_segments.count(segment_index) > 0;
+      bool watch_segment = debug && (debug_segments.count(segment_index) > 0);
       auto log_with_loop = [&](const char *status) {
+        if (!debug) {
+          return;
+        }
         std::cerr << "[debug] loop=" << surface.loop_id
                   << " type=" << static_cast<int>(surface.kind)
                   << " pairs=";
