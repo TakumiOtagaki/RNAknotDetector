@@ -35,14 +35,6 @@ double DistancePointSegmentSquared(const Vec2 &p, const Vec2 &a, const Vec2 &b) 
   return dx * dx + dy * dy;
 }
 
-double Cross2D(const Vec2 &a, const Vec2 &b, const Vec2 &c) {
-  double abx = b.x - a.x;
-  double aby = b.y - a.y;
-  double acx = c.x - a.x;
-  double acy = c.y - a.y;
-  return abx * acy - aby * acx;
-}
-
 std::vector<Vec2> SortByAngle(std::vector<Vec2> points) {
   if (points.size() < 3) {
     return points;
