@@ -25,10 +25,70 @@ class ResidueKey:
     segi: str
 
 
+def _apply_pymol_qt_compat_patch() -> None:
+    try:
+        from pmg_qt import pymol_gl_widget
+    except Exception:
+        return
+
+    widget_cls = pymol_gl_widget.PyMOLGLWidget
+    if getattr(widget_cls, "_rnaknot_qt_compat_patched", False):
+        return
+
+    qt = pymol_gl_widget.Qt
+    if hasattr(qt, "GestureStarted"):
+        widget_cls._rnaknot_qt_compat_patched = True
+        return
+
+    gesture_state = getattr(qt, "GestureState", None)
+    if gesture_state is None or not hasattr(gesture_state, "GestureStarted"):
+        return
+
+    started_state = gesture_state.GestureStarted
+
+    def gesture_event_compat(self, ev):
+        gesture = ev.gesture(qt.PinchGesture)
+
+        if gesture is None:
+            return False
+
+        if gesture.state() == started_state:
+            self.pinch_start_z = self.cmd.get_view()[11]
+
+        change_flags = gesture.changeFlags()
+
+        if change_flags & pymol_gl_widget.QtWidgets.QPinchGesture.RotationAngleChanged:
+            delta = gesture.lastRotationAngle() - gesture.rotationAngle()
+            self.cmd.turn("z", delta)
+
+        if change_flags & pymol_gl_widget.QtWidgets.QPinchGesture.ScaleFactorChanged:
+            view = list(self.cmd.get_view())
+
+            totalscalefactor = gesture.totalScaleFactor()
+            if totalscalefactor == 1.0:
+                totalscalefactor = gesture.scaleFactor()
+
+            z = self.pinch_start_z / totalscalefactor
+            delta = z - view[11]
+            view[11] = z
+            view[15] -= delta
+            view[16] -= delta
+            self.cmd.set_view(view)
+
+        return True
+
+    widget_cls.gestureEvent = gesture_event_compat
+    widget_cls._rnaknot_qt_compat_patched = True
+    print("[info] Applied PyMOL Qt gesture compatibility patch")
+
+
+_apply_pymol_qt_compat_patch()
+
+
 def rnaknot_hit(
     model_name: str,
     ss_path: Optional[str] = None,
-    chain: str = "A",
+    chain: str = "",
     surface_mode: int = 1,
     polyline_mode: int = 1,
     multi_chunk: int = 12,
@@ -38,21 +98,26 @@ def rnaknot_hit(
     eps_collinear: float = 1e-6,
     cmd_obj=None,
 ) -> List[int]:
+    """Detect entanglement hits on the RNA part of a PyMOL object.
+
+    If no chain is given and the object contains exactly one nucleic-acid chain,
+    that chain is used automatically.
+    """
     cmd_handle = cmd_obj or cmd
     if cmd_handle is None:
         raise RuntimeError("pymol.cmd is not available")
 
-    coords_cpp, res_id_map, atom_map = _extract_coords_from_pymol(
+    coords_cpp, res_id_map, atom_map, resolved_chain = _extract_coords_from_pymol(
         cmd_handle, model_name, chain
     )
     if not coords_cpp:
-        raise RuntimeError("No residues found for the requested model/chain")
+        raise RuntimeError("No nucleic-acid residues found for the requested model/chain")
 
     if ss_path:
         bp_list = _load_base_pairs(ss_path)
     else:
         print("[info] ss_path not provided; using DSSR via rna-tools")
-        bp_list = _load_base_pairs_from_rna_tools(cmd_handle, model_name, chain)
+        bp_list = _load_base_pairs_from_rna_tools(cmd_handle, model_name, resolved_chain)
     if main_layer_only or not bp_list:
         bp_list = core.get_main_layer_pairs(bp_list)
 
@@ -93,7 +158,7 @@ def rnaknot_hit(
             f"pairs={closing_pairs} segment=({a_label},{b_label})"
         )
         selection_name = f"{model_name}_hit_{idx}"
-        selection = _build_hit_selection(loop, hit, res_id_map, chain)
+        selection = _build_hit_selection(loop, hit, resolved_chain)
         cmd_handle.select(selection_name, f"({model_name} and {selection})")
         tri_count = len(surface.triangles) if surface.triangles is not None else 0
         print(f"[debug] hit={idx} loop={hit.loop_id} tri_n={tri_count}")
@@ -140,7 +205,7 @@ def _load_base_pairs_from_rna_tools(
     dssr_path = _resolve_dssr_path(rtc)
     rtc.X3DNA = dssr_path
 
-    selection = f"{model_name} and chain {chain}"
+    selection = _nucleic_selection(model_name, chain)
     with tempfile.NamedTemporaryFile(suffix=".pdb", delete=False) as handle:
         tmp_path = handle.name
     cmd_handle.save(tmp_path, selection)
@@ -245,8 +310,14 @@ def _extract_coords_from_pymol(
     cmd_handle,
     model_name: str,
     chain: str,
-) -> Tuple[List[core.ResidueCoord], Dict[int, str], Dict[int, Dict[str, Tuple[float, float, float]]]]:
-    model = cmd_handle.get_model(f"{model_name} and chain {chain}")
+) -> Tuple[
+    List[core.ResidueCoord],
+    Dict[int, str],
+    Dict[int, Dict[str, Tuple[float, float, float]]],
+    str,
+]:
+    resolved_chain, selection = _resolve_nucleic_chain(cmd_handle, model_name, chain)
+    model = cmd_handle.get_model(selection)
     residue_order: List[ResidueKey] = []
     residue_atoms: Dict[ResidueKey, Dict[str, Tuple[float, float, float]]] = {}
 
@@ -271,7 +342,61 @@ def _extract_coords_from_pymol(
             core.Vec3(*c4) if c4 else core.Vec3(math.nan, math.nan, math.nan),
         ]
         coords_cpp.append(core.ResidueCoord(idx, coords))
-    return coords_cpp, res_id_map, atom_map
+    return coords_cpp, res_id_map, atom_map, resolved_chain
+
+
+def _resolve_nucleic_chain(cmd_handle, model_name: str, chain: str) -> Tuple[str, str]:
+    requested_chain = chain.strip() if chain else ""
+    if requested_chain:
+        selection = _nucleic_selection(model_name, requested_chain)
+        if cmd_handle.count_atoms(selection) > 0:
+            return requested_chain, selection
+
+    available_chains = _list_nucleic_chains(cmd_handle, model_name)
+    if not available_chains:
+        raise RuntimeError(f"No nucleic-acid residues found in object '{model_name}'")
+
+    if requested_chain and requested_chain in available_chains:
+        return requested_chain, _nucleic_selection(model_name, requested_chain)
+
+    if len(available_chains) == 1:
+        resolved_chain = available_chains[0]
+        if requested_chain and requested_chain != resolved_chain:
+            print(
+                f"[warning] chain {requested_chain!r} has no nucleic-acid residues; "
+                f"using RNA chain {resolved_chain!r} instead"
+            )
+        elif not requested_chain:
+            print(f"[info] using nucleic-acid chain {resolved_chain!r}")
+        return resolved_chain, _nucleic_selection(model_name, resolved_chain)
+
+    chain_list = ", ".join(repr(chain_id) for chain_id in available_chains)
+    if requested_chain:
+        raise RuntimeError(
+            f"chain {requested_chain!r} has no nucleic-acid residues; "
+            f"available nucleic-acid chains: {chain_list}. "
+            f"Try: rnaknot_hit {model_name}, , {available_chains[0]}"
+        )
+    raise RuntimeError(
+        f"multiple nucleic-acid chains found in '{model_name}': {chain_list}; "
+        f"please specify the RNA chain explicitly, for example: "
+        f"rnaknot_hit {model_name}, , {available_chains[0]}"
+    )
+
+
+def _list_nucleic_chains(cmd_handle, model_name: str) -> List[str]:
+    model = cmd_handle.get_model(_nucleic_selection(model_name, ""))
+    chains = set()
+    for atom in model.atom:
+        chains.add((atom.chain or "").strip())
+    return sorted(chains)
+
+
+def _nucleic_selection(model_name: str, chain: str) -> str:
+    parts = [f"({model_name})", "polymer.nucleic"]
+    if chain:
+        parts.append(f"chain {chain}")
+    return " and ".join(parts)
 
 
 def _format_residue_id(key: ResidueKey) -> str:
@@ -302,7 +427,6 @@ def _format_endpoint(res_id_map: Dict[int, str], res_index: int, atom_kind) -> s
 def _build_hit_selection(
     loop,
     hit,
-    res_id_map: Dict[int, str],
     chain: str,
 ) -> str:
     residues = set(loop.boundary_residues)
@@ -312,7 +436,9 @@ def _build_hit_selection(
     residues.add(hit.res_a)
     residues.add(hit.res_b)
     resi = "+".join(str(idx) for idx in sorted(residues))
-    return f"(chain {chain} and resi {resi})"
+    if chain:
+        return f"(polymer.nucleic and chain {chain} and resi {resi})"
+    return f"(polymer.nucleic and resi {resi})"
 
 
 def _draw_hit_objects(

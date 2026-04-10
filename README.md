@@ -37,3 +37,43 @@ color_main_layer_pairs Example02, A, /Users/ootagakitakumi/RNAknotDetector/examp
 ```
 
 pseudoknot visualizer の出力と一致することを 6t3r と Example02 で確認しておいた
+
+### PyMOL `rnaknot_hit`
+`python/pymol_rnaknot_hit.py` adds the `rnaknot_hit` command for RNA entanglement inspection in PyMOL.
+
+Load or reload it in PyMOL with:
+
+```pymol console
+run /Users/ootagakitakumi/RNAknotDetector/python/pymol_rnaknot_hit.py
+```
+
+Basic usage:
+
+```pymol console
+rnaknot_hit 6t3r, /Users/ootagakitakumi/RNAknotDetector/examples/6t3r.secstruct, A
+rnaknot_hit Example02, /Users/ootagakitakumi/RNAknotDetector/examples/Example02.secstruct, A
+```
+
+If `ss_path` is omitted, the command tries to derive secondary structure with DSSR:
+
+```pymol console
+rnaknot_hit 6t3r, , A
+```
+
+Behavior on complexes:
+
+- The command analyzes only `polymer.nucleic` atoms, so protein atoms in the same object are ignored.
+- If there is exactly one nucleic-acid chain in the object, `chain` can be omitted.
+- If there are multiple nucleic-acid chains, `chain` must be specified explicitly.
+
+Example for a protein-RNA complex with multiple RNA chains:
+
+```pymol console
+rnaknot_hit 9c2k, , C
+rnaknot_hit 9c2k, , R
+```
+
+Notes:
+
+- If you edit `python/pymol_rnaknot_hit.py`, rerun the `run .../pymol_rnaknot_hit.py` command or restart PyMOL.
+- The script includes a small compatibility workaround for the PyMOL 3.1 / Qt gesture issue seen on some Homebrew installs.
