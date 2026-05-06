@@ -1,5 +1,6 @@
 #include "geometry3d.h"
 
+#include <algorithm>
 #include <cmath>
 
 namespace rna {
